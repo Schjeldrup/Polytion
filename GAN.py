@@ -12,7 +12,7 @@ class generator(nn.Module):
     def __init__(self):
         super(generator, self).__init__()
         
-        #Insert CPD reconstroction of higher resolution image
+        #Insert CPD reconstruction of higher resolution image
 
 
 class discriminator(nn.Module):
@@ -56,8 +56,8 @@ for epoch in range(num_epochs):
         (split, into, parts) = data
         true_label = torch.ones(batch_size, 1)#.to(device)
         fake_label = torch.zeros(batch_size, 1)#.to(device)
-        my_discriminator.zero_grad()
-        my_generator.zero_grad()
+        discriminator.zero_grad()
+        generator.zero_grad()
         
         # Step 1. Send real data through discriminator and backpropagate its errors.
         x_true = Variable(real_data)#.to(device)
@@ -85,7 +85,7 @@ for epoch in range(num_epochs):
         # Step 4. Send fake data through discriminator _again_
         #         propagate the error of the generator and
         #         update G weights.
-        output = my_discriminator1(x_fake)
+        output = discriminator(x_fake)
         
         error_generator = loss(output, true_label)
         error_generator.backward()
@@ -97,4 +97,6 @@ for epoch in range(num_epochs):
         
     discriminator_loss.append(np.mean(batch_d_loss))
     generator_loss.append(np.mean(batch_g_loss))
+    
+plt.scatter
     
