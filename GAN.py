@@ -5,12 +5,39 @@ GAN Structure
 
 import torch
 import numpy as np
+import torch
+import tntorch as tn
 import matplotlib.pyplot as plt
 from torch.autograd import Variable
+torch.set_default_dtype(torch.float64)
 
 class generator(nn.Module):
     def __init__(self):
         super(generator, self).__init__()
+        
+    def polygen(data):
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         
         #Insert CPD reconstruction of higher resolution image
 
