@@ -36,7 +36,7 @@ import threading
 class FTT_Layer(torch.nn.Module):
     def __init__(self, N, rank, imwidth, imheight, verbose = 0):
         super(FTT_Layer, self).__init__()
-
+        
         # N = order of the polynomial = order of the tensor A:
         # A is of dimension (s, s, ..., s) = (N x s)
         # rank = rank used for the tensor cores
@@ -44,35 +44,35 @@ class FTT_Layer(torch.nn.Module):
         self.N = N
         self.rank = rank
         self.s = imwidth * imheight
-
+        
         # Make a list of TTcore ranks, starting from r_0 = r_N = 1: perhaps feed it in as a list? isinstance(rank, list)
         self.ranklist = [1, 1]
         for n in range(self.N - 1):
             self.ranklist.insert(-1, self.rank)
-
+        
         # Start by making the tensor train: store the matrices in one big parameterlist
         self.TT = torch.nn.ParameterList()
-
+        
         # Make s instances for every mode of the tensor, or make a 3D tensor instead:
         for n in range(self.N):
             # Make tensors of size (r_{k-1}, n_{k} = self.s, r_{k})
             TTcore = torch.empty(self.ranklist[n], self.s, self.ranklist[n+1])
             torch.nn.init.xavier_normal_(TTcore)
             self.TT.append(torch.nn.Parameter(TTcore))
-
+                        
         if verbose != 0:
             print("self.ranklist =", self.ranklist)
-            print("self.N =", self.N, "+ 1 ?=", len(self.ranklist), "= len(self.ranklist)")
+            print("self.N =", self.N, "+ 1 ?=", len(self.ranklist), "= len(self.ranklist)") 
             print("TT has", len(self.TT), "elements")
-
+        
     def parallelVecProd(self, index):
         self.V[index] = self.z @ self.TT[index]
         return
-
+    
     def forward(self, z):
         # Compute the forward pass: the nmode multiplications f = A x1 z x2 z x3 ··· x(N-1) z
         # Follow algorithm 1: allocate space and compute each V^(k), possible in parallel with threads
-        # Problem: this algorithm is mae for a scalar output. Here we will perform all but up to the last
+        # Problem: this algorithm is mae for a scalar output. Here we will perform all but up to the last 
         # multiplication, so that V[-1] is of the required length s
         self.z = z
         self.V = [None] * self.N
@@ -85,7 +85,7 @@ class FTT_Layer(torch.nn.Module):
             process.start()
             threads.append(process)
         self.V[-1] = self.TT[k + 1][:, :, 0]
-
+            
         # Wait for first thread to finish:
         threads[0].join()
         f = self.V[0]
@@ -94,7 +94,7 @@ class FTT_Layer(torch.nn.Module):
             f @= self.V[k]
         # Now we have a vector f of size s
         return f.reshape(-1)
-
+    
 
 
 # ## PolyGAN CP decomposition
@@ -106,7 +106,7 @@ class FTT_Layer(torch.nn.Module):
 class PolyGAN_CP_Layer(torch.nn.Module):
     def __init__(self, N, rank, imwidth, imheight, verbose = 0):
         super(PolyGAN_CP_Layer, self).__init__()
-
+        
         # N = order of the polynomial = order of the tensor A:
         # A is of dimension (s, s, ..., s) = (N x s)
         # rank = rank used for the tensor cores
@@ -114,20 +114,20 @@ class PolyGAN_CP_Layer(torch.nn.Module):
         self.N = N
         self.rank = rank
         self.s = imwidth * imheight
-
+        
         # bias and weights
         b = torch.empty(self.s)
         torch.nn.init.xavier_normal_(b)
         self.b = torch.nn.Parameter(b)
-
+        
         self.W = torch.nn.ParameterList()
-
-
+        
+    
     def forward(self, z):
         # Compute the forward pass: the nmode multiplications f = self.b + self.b + self.W[0]*z + z.T*...
-
+       
         return z
-
+    
 
 
 # ## PolyGAN TT decomposition
@@ -139,7 +139,7 @@ class PolyGAN_CP_Layer(torch.nn.Module):
 class PolyGAN_TT_Layer(torch.nn.Module):
     def __init__(self, N, rank, imwidth, imheight, verbose = 0):
         super(PolyGAN_TT_Layer, self).__init__()
-
+        
         # N = order of the polynomial = order of the tensor A:
         # A is of dimension (s, s, ..., s) = (N x s)
         # rank = rank used for the tensor cores
@@ -147,20 +147,20 @@ class PolyGAN_TT_Layer(torch.nn.Module):
         self.N = N
         self.rank = rank
         self.s = imwidth * imheight
-
+        
         # bias and weights
         b = torch.empty(self.s)
         torch.nn.init.xavier_normal_(b)
         self.b = torch.nn.Parameter(b)
-
+        
         self.W = torch.nn.ParameterList()
-
-
+        
+    
     def forward(self, z):
         # Compute the forward pass: the nmode multiplications f = self.b + self.b + self.W[0]*z + z.T*...
-
+       
         return z
-
+    
 
 
 # ## Plug and play
@@ -170,26 +170,26 @@ class PolyGAN_TT_Layer(torch.nn.Module):
 
 
 # define testnetwork
-class testGenerator(torch.nn.Module):
-    def __init__(self, N, rank, imwidth, imheight):
-        super(testGenerator, self).__init__()
-
+class Generator(torch.nn.Module):
+    def __init__(self, layer, N, rank, imwidth, imheight):
+        super(Generator, self).__init__()
+        
         self.imwidth, self.imheight = imwidth, imheight
         self.s = imwidth*imheight
-        self.PolyLayer = FTT_Layer(N, rank, imwidth, imheight, 1)
-
-    def forward(self, x):
+        self.PolyLayer = layer(N, rank, imwidth, imheight, 1)
+    
+    def forward(self, x): 
         # UserWarning: Bi-quadratic interpolation behavior has changed due to a bug in the implementation of scikit-image
         # Perhaps another bilinear interpolation method?
         x = skimage.transform.resize(x, (self.imwidth, self.imheight), order=1, anti_aliasing=True)
-        x = torch.tensor(x).float() # make tensor, no need for the very high precision
+        # x = torch.tensor(x).float() # make tensor, no need for the very high precision
         x = x.reshape(self.s) # flatten to the 1D equivalent vector
-
+        
         x = self.PolyLayer(x)
         x = x.reshape(self.imwidth, self.imheight)
         return x
 
-net = testGenerator(N, rank, imwidth, imheight)
+net = Generator(FTT_Layer, N, rank, imwidth, imheight)
 
 output = net(low_res_sample)
 print("\noutput has shape", output.shape)
@@ -221,19 +221,19 @@ for t in tqdm(range(loops)):
     pred_start = time.time()
     pred = net(low_res_sample)
     pred_timer.append(time.time() - pred_start)
-
+    
     crit_start = time.time()
     loss = criterion(pred, high_res_sample)
     crit_timer.append(time.time() - crit_start)
-
+    
     optm_start = time.time()
     optimizer.zero_grad()
     optm_timer.append(time.time() - optm_start)
-
+    
     loss_start = time.time()
     loss.backward()
     loss_timer.append(time.time() - loss_start)
-
+    
     step_start = time.time()
     optimizer.step()
     step_timer.append(time.time() - step_start)
@@ -253,3 +253,4 @@ print("crit_timer =", mean(crit_timer), "s on average")
 print("optm_timer =", mean(optm_timer), "s on average")
 print("loss_timer =", mean(loss_timer), "s on average")
 print("step_timer =", mean(step_timer), "s on average")
+
