@@ -2,8 +2,8 @@
 # Here, all tensor decomposition functions can be found so far
 
 import numpy as np
-import matplotlib.pyplot as plt
-%matplotlib inline
+#import matplotlib.pyplot as plt
+#%matplotlib inline
 import torch
 import skimage
 
@@ -207,7 +207,7 @@ def Compose(factors):
 
 class PolytionLayer(torch.nn.Module):
     def __init__(self, N, im_w, im_h):
-        super(PolyLayer, self).__init__()
+        super(PolytionLayer, self).__init__()
 
         self.d = im_w * im_h
         # N = order of the polynomial
@@ -252,12 +252,12 @@ class PolytionLayer(torch.nn.Module):
         return self.polyGAN(x)
 
 
-class PlytionNet(torch.nn.Module):
+class PolytionNet(torch.nn.Module):
     def __init__(self, N, im_w, im_h):
-        super(Net, self).__init__()
+        super(PolytionNet, self).__init__()
 
         self.im_w, self.im_h = im_w, im_h
-        self.PG = PolyLayer(N, im_w, im_h)
+        self.PG = PolytionLayer(N, im_w, im_h)
 
     def forward(self, x):
         # Find bilinear version of this:
