@@ -2,8 +2,6 @@
 # Here, all tensor decomposition functions can be found so far
 
 import numpy as np
-#import matplotlib.pyplot as plt
-#%matplotlib inline
 import torch
 import skimage
 
@@ -204,65 +202,3 @@ def Compose(factors):
     # Use the mode-0 unfolding and just fold it back.
     return Fold(UnfoldFM(factor_matrices, 0), 0, tshape)
 
-
-class PolytionLayer(torch.nn.Module):
-    def __init__(self, N, im_w, im_h):
-        super(PolytionLayer, self).__init__()
-
-        self.d = im_w * im_h
-        # N = order of the polynomial
-        # d = length of the flattened input
-
-        # Currently arvitrary rank choice
-        self.rank = 3
-        self.shapes = []
-
-        self.b = torch.nn.Parameter(torch.zeros((self.d)).normal_(0, np.sqrt(2)))
-        self.W = torch.nn.ParameterList()
-
-        # 0th order: bias [d], 1st order: weight [d, d], 2nd order: weight [d, d, d]
-        for n in range(1, N + 1):
-            tshape = [self.d]*(n + 1)
-            self.shapes.append(tshape)
-
-            # Here we allocate all the factor matrices (using CP):
-            for o in range(n + 1):
-                # We need one factor matrix per dimension of the weight matrix of that order.
-                # So 3rd order [d, d, d] has 3 factor matrices of shape [d, rank]
-                factor = torch.zeros((self.d, self.rank)).normal_(0, np.sqrt(2))
-                self.W.append(torch.nn.Parameter(factor))
-
-    def polyGAN(self, data):
-        #return self.b + self.W[0]*data + data.T*...
-        summation = self.b
-        Wcounter = 0
-        for n in range(1, N + 1):
-            # n = 1: first  order so 2D matrix with 2 fm's
-            # n = 2: second order so 3D tensor with 3 fm's
-            allprod = torch.ones(self.d)
-            for k in range(n):
-                vecprod = 0
-                for r in range(self.rank):
-                    fm_col = self.W[k][:,r]
-                    vecprod += data * fm_col
-                allprod *= vecprod
-        return summation
-
-    def forward(self, x):
-        return self.polyGAN(x)
-
-
-class PolytionNet(torch.nn.Module):
-    def __init__(self, N, im_w, im_h):
-        super(PolytionNet, self).__init__()
-
-        self.im_w, self.im_h = im_w, im_h
-        self.PG = PolytionLayer(N, im_w, im_h)
-
-    def forward(self, x):
-        # Find bilinear version of this:
-        x = skimage.transform.resize(x, (self.im_w, self.im_h), anti_aliasing=True)
-        x = torch.tensor(x) # make tensor
-        x = x.reshape(self.im_w*self.im_h) # flatten to the 1D equivalent vector
-        x = x.float() # no need for the very high precision
-        return self.PG(x)
