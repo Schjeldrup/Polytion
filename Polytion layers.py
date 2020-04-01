@@ -4,97 +4,24 @@
 # # PolyGAN layers
 # This notebook contains the different polynomial approximation layers for us in the generator structure
 
-# In[1]:
+# In[2]:
 
 
 import torch
 import skimage
 
 
-# In[2]:
+# In[21]:
 
 
 # Save the desired order and rank of the following algorithms here:
-N = 5
-rank = 3
+N = 3
+rank = 2
 
 # Save a standard set of inputs
 imwidth, imheight = 512, 512
 high_res_sample = torch.rand(imwidth,imwidth).float()
 low_res_sample  = torch.rand(int(imwidth/4), int(imwidth/4)).float()
-
-
-# ## Fast Tensor-train contraction
-# See "Parallelized Tensor Train Learning of Polynomial
-# Classifiers". Eq (8), (10), (11) and algorithm 1.
-
-# In[3]:
-
-
-import threading
-
-class FTT_Layer(torch.nn.Module):
-    def __init__(self, N, rank, imwidth, imheight, verbose = 0):
-        super(FTT_Layer, self).__init__()
-        
-        # N = order of the polynomial = order of the tensor A:
-        # A is of dimension (s, s, ..., s) = (N x s)
-        # rank = rank used for the tensor cores
-        # size = length of the flattened input
-        self.N = N
-        self.rank = rank
-        self.s = imwidth * imheight
-        
-        # Make a list of TTcore ranks, starting from r_0 = r_N = 1: perhaps feed it in as a list? isinstance(rank, list)
-        self.ranklist = [1, 1]
-        for n in range(self.N - 1):
-            self.ranklist.insert(-1, self.rank)
-        
-        # Start by making the tensor train: store the matrices in one big parameterlist
-        self.TT = torch.nn.ParameterList()
-        
-        # Make s instances for every mode of the tensor, or make a 3D tensor instead:
-        for n in range(self.N):
-            # Make tensors of size (r_{k-1}, n_{k} = self.s, r_{k})
-            TTcore = torch.empty(self.ranklist[n], self.s, self.ranklist[n+1])
-            torch.nn.init.xavier_normal_(TTcore)
-            self.TT.append(torch.nn.Parameter(TTcore))
-                        
-        if verbose != 0:
-            print("self.ranklist =", self.ranklist)
-            print("self.N =", self.N, "+ 1 ?=", len(self.ranklist), "= len(self.ranklist)") 
-            print("TT has", len(self.TT), "elements")
-        
-    def parallelVecProd(self, index):
-        self.V[index] = self.z @ self.TT[index]
-        return
-    
-    def forward(self, z):
-        # Compute the forward pass: the nmode multiplications f = A x1 z x2 z x3 ··· x(N-1) z
-        # Follow algorithm 1: allocate space and compute each V^(k), possible in parallel with threads
-        # Problem: this algorithm is mae for a scalar output. Here we will perform all but up to the last 
-        # multiplication, so that V[-1] is of the required length s
-        self.z = z
-        self.V = [None] * self.N
-        # Perform parallel computation of the products: tremendous speedup
-        threads = []
-        for k in range(self.N - 1):
-            # V[k] = z @ self.TT[k]
-            # V[k] = self.parallelVecProd(z, self.TT[k])
-            process = threading.Thread(target=self.parallelVecProd, args=(k,))
-            process.start()
-            threads.append(process)
-        self.V[-1] = self.TT[k + 1][:, :, 0]
-            
-        # Wait for first thread to finish:
-        threads[0].join()
-        f = self.V[0]
-        for k in range(1, self.N):
-            threads[k].join() if k != self.N - 1 else None
-            f @= self.V[k]
-        # Now we have a vector f of size s
-        return f.reshape(-1)
-    
 
 
 # ## PolyGAN CP decomposition
@@ -163,10 +90,97 @@ class PolyGAN_TT_Layer(torch.nn.Module):
     
 
 
+# ## Fast Tensor-train contraction
+# See "Parallelized Tensor Train Learning of Polynomial
+# Classifiers". Eq (8), (10), (11) and algorithm 1.
+
+# The result is given by
+# \begin{align*}
+# \mathcal{G_1} (i_1) \cdot \prod_{k=2}^{n+1} \left(\sum_{i_k = 1}^{s} z_{i_k} \cdot \mathcal{G_k}(i_k) \right)
+# \end{align*}
+# with $\boldsymbol{z} \in \mathcal{R}^{d}$
+
+# In[42]:
+
+
+import threading
+
+class FTT_Layer(torch.nn.Module):
+    def __init__(self, N, rank, imwidth, imheight, verbose = 0):
+        super(FTT_Layer, self).__init__()
+        
+        # N = order of the polynomial = order of the tensor A:
+        # A is of dimension (s, s, ..., s) = (N x s)
+        # rank = rank used for the tensor cores
+        # size = length of the flattened input
+        self.N = N
+        self.rank = rank
+        self.s = imwidth * imheight
+        self.verbose = verbose
+        
+        # Make a list of TTcore ranks, starting from r_0 = r_N = 1: perhaps feed it in as a list? isinstance(rank, list)
+        self.ranklist = [1, 1]
+        for n in range(self.N - 1):
+            self.ranklist.insert(-1, self.rank)
+        
+        # Start by making the tensor train: store the matrices in one big parameterlist
+        self.TT = torch.nn.ParameterList()
+        
+        # Make s instances for every mode of the tensor, or make a 3D tensor instead:
+        for n in range(self.N):
+            # Make tensors of size (r_{k-1}, n_{k} = self.s, r_{k})
+            TTcore = torch.empty(self.ranklist[n], self.s, self.ranklist[n+1])
+            torch.nn.init.xavier_normal_(TTcore)
+            self.TT.append(torch.nn.Parameter(TTcore))
+                        
+        if self.verbose != 0:
+            print("self.ranklist =", self.ranklist)
+            print("self.N =", self.N, "+ 1 ?=", len(self.ranklist), "= len(self.ranklist)") 
+            print("TT has", len(self.TT), "elements:")
+            for i, tt in enumerate(self.TT):
+                print("element 1:", tt.shape)
+        
+    def parallelVecProd(self, index):
+        res = 0
+        for i in range(self.s):
+            res += self.z[i] * self.TT[index][:,i,:]
+        self.V[index] = res
+        # Problem: why does self.V[index] = self.z @ self.TT[index] give a faster but different result?
+        # Tested this with both implementations. 
+        # Would we need .permute(1,0,2)
+        return
+    
+    def forward(self, z):
+        # Compute the forward pass: the nmode multiplications f = A x1 z x2 z x3 ··· x(N-1) z
+        # Follow algorithm 1: allocate space and compute each V^(k), possible in parallel with threads.
+        self.V = [None] * self.N
+        self.z = z
+        threads = []
+
+        # Perform parallel computation of the products: tremendous speedup. V[0] will not be used.
+        if self.verbose != 0:
+            print("Threads are computing..")
+        for k in range(1, self.N):
+            process = threading.Thread(target=self.parallelVecProd, args=(k,))
+            process.start()
+            threads.append(process)
+            
+        # Start the whole product chain now, so that we have [(1),s,r] x [r, r] x ... x [r, (1)] = s
+        f = self.TT[0][0,:,:] 
+        for k in range(1, self.N):
+            threads[k-1].join()
+            f @= self.V[k]
+            print(self.V[k].shape)
+        # Now we have a vector f of size s
+        print("f has shape", f.shape)
+        return f.reshape(-1)
+    
+
+
 # ## Plug and play
 # Test the different layers in a standard net
 
-# In[6]:
+# In[41]:
 
 
 # define testnetwork
@@ -182,7 +196,7 @@ class Generator(torch.nn.Module):
         # UserWarning: Bi-quadratic interpolation behavior has changed due to a bug in the implementation of scikit-image
         # Perhaps another bilinear interpolation method?
         x = skimage.transform.resize(x, (self.imwidth, self.imheight), order=1, anti_aliasing=True)
-        # x = torch.tensor(x).float() # make tensor, no need for the very high precision
+        x = torch.tensor(x).float() # make tensor, no need for the very high precision
         x = x.reshape(self.s) # flatten to the 1D equivalent vector
         
         x = self.PolyLayer(x)
