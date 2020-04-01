@@ -1,53 +1,73 @@
 # -*- coding: utf-8 -*-
 """
-GAN Structure
-"""
-
-import torch
+import torch.nn as nn
 import numpy as np
 import torch
 import tntorch as tn
 import matplotlib.pyplot as plt
 from torch.autograd import Variable
+import Polytion.py
+import prepData.py
 torch.set_default_dtype(torch.float64)
-
-class generator(nn.Module):
-    def __init__(self):
-        super(generator, self).__init__()
-        
-    def polygen(data):
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        #Insert CPD reconstruction of higher resolution image
+from torch.utils.data import DataLoader
 
 
+"""
+Loader
+"""
+
+images=load_images_from_folder('Images_png_01')
+
+"""
+downscaler
+"""
+
+batch_size = 1
+lowres_loader = DataLoader(images, batch_size=batch_size)#, pin_memory=cuda)
+real_data_loader = DataLoader(images,batch_size=batch_size)
+
+"""
+GAN Structure
+"""
+
+
+  
+        
+        
+
+#Takes a low-resolution pic and a high-resolution and outputs a probability of it being a fake
 class discriminator(nn.Module):
     def __init__(self):
-        super(discriminator,self).__init__()
+        super(discriminator, self).__init__()
+        # On the {z_s,d}
+        self.disc = nn.Sequential(
+        nn.Conv2d(x, x, kernel_size=3, stride=1,padding=0),
+        nn.ReLU(),
+        nn.Conv2d(x, y, kernel_size=4, stride=2,padding=0),
+        nn.ReLU(),
         
-        #Insert multilayer shrink to a number between 0 and 1 showing confidence percentage
+        nn.Conv2d(y, y, kernel_size=3, stride=1,padding=0),
+        nn.ReLU(),
+        nn.Conv2d(y, z, kernel_size=4, stride=2,padding=0),
+        nn.ReLU(),
         
+        nn.Conv2d(z, z, kernel_size=3, stride=1,padding=0),
+        nn.ReLU(),
+        nn.Conv2d(z, q, kernel_size=4, stride=2,padding=0),
+        nn.ReLU(),
+        
+        nn.Conv2d(q, q, kernel_size=3, stride=1,padding=0),
+        nn.ReLU())
+
+    def forward(self, lowres,highres):
+        combine= torch.cat([lowres,highres], dim=1)
+        return self.disc(combine)
+        
+my_generator = generator()
+my_discriminator = discriminator()
+
+print(my_generator.parameters)
+
 
 from torch.autograd import Variable
 loss = nn.BCELoss()  
@@ -79,7 +99,7 @@ for epoch in range(num_epochs):
     if epoch in range(30):
         generator_optim = torch.optim.Adam(my_generator.parameters(), lr_scheduler[epoch], betas=(0.5, 0.9))
         discriminator_optim = torch.optim.Adam(my_discriminator.parameters(), lr_scheduler[epoch], betas=(0.5, 0.9))
-    for i, data in enumerate(zip(what we are working on)):
+    for i, data in enumerate(zip(real_data_loader,attribute_loader)):
         (split, into, parts) = data
         true_label = torch.ones(batch_size, 1)#.to(device)
         fake_label = torch.zeros(batch_size, 1)#.to(device)
@@ -125,5 +145,5 @@ for epoch in range(num_epochs):
     discriminator_loss.append(np.mean(batch_d_loss))
     generator_loss.append(np.mean(batch_g_loss))
     
-plt.scatter
+plt.scatter()
     
