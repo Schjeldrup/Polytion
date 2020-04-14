@@ -272,7 +272,6 @@ class Generator(torch.nn.Module):
         self.x[b, self.c-1, :] = self.PolyLayer(self.x[b, self.c-1, :])
         return
     
-<<<<<<< HEAD
     def forward(self, x):
         # Register x as attribute for parallel access
         self.bsize, self.c, w, h = x.shape
@@ -306,24 +305,6 @@ net = Generator(PolyGAN_CP_Layer, N, rank, imwidth, imheight, scalefactor)
 # Make batch version:
 output = net(lo_res_batch)
 print("batch output has shape", output.shape)
-=======
-    def forward(self, x): 
-        # UserWarning: Bi-quadratic interpolation behavior has changed due to a bug in the implementation of scikit-image
-        # Perhaps another bilinear interpolation method?
-        
-        x = skimage.transform.resize(x, (self.imwidth, self.imheight), order=1, anti_aliasing=True)
-        x = torch.tensor(x).float() # make tensor, no need for the very high precision
-        x = x.reshape(self.s) # flatten to the 1D equivalent vector
-        
-        x = self.PolyLayer(x)
-        x = x.reshape(self.imwidth, self.imheight)
-        return x
-""" 
-#net = Generator(FTT_Layer, N, rank, imwidth, imheight)
-net = Generator(PolyGAN_CP_Layer, N, rank, imwidth, imheight)
-output = net(low_res_sample)
-print("\noutput has shape", output.shape)
->>>>>>> be89edbdad0a5825ee4b46fe36bf6e2b21f1d510
 
 
 # In[35]:
@@ -385,4 +366,3 @@ print("optm_timer =", mean(optm_timer)/batchsize, "s on average")
 print("loss_timer =", mean(loss_timer)/batchsize, "s on average")
 print("step_timer =", mean(step_timer)/batchsize, "s on average")
 
-"""
