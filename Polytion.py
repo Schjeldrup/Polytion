@@ -201,4 +201,3 @@ def Compose(factors):
 
     # Use the mode-0 unfolding and just fold it back.
     return Fold(UnfoldFM(factor_matrices, 0), 0, tshape)
-
