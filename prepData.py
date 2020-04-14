@@ -11,8 +11,14 @@ import numpy as np
 from skimage import transform
 from PIL import Image
 
-
 def load_images_from_folder(folder):
+    images=[]
+    for filename in os.listdir(folder):
+        img = Image.open(os.path.join(folder,filename))
+        images.append(np.asarray(img))
+    return images
+
+def load_images_from_all_folders(folder):
     images = []
     for root, dirs, files in os.walk(folder, topdown=True):        
         for file in files:
@@ -25,21 +31,16 @@ def load_images_from_folder(folder):
 #        images.append(img)
     return images
 
+def compress_images(images):
+    img=[]
+    for n in range(len(images)):
+        img.append(transform.resize(images[0], (images[0].shape[0] / 4, images[0].shape[1] / 4), anti_aliasing=True))
+    return img
 
-images=load_images_from_folder('Images_png_01')
-
-d=512
-num=len(images)
-img=np.zeros((num,d,d))
-for n in range(len(images)):
-    img[0]=np.asarray(images[n])
-faked = transform.resize(img[0], (img[0].shape[0] / 4, img[0].shape[1] / 4), anti_aliasing=True)
-
-### Normalize
-minval= np.min(img[0])
-maxval= np.max(img[0])
-img2=(img[0]-minval)/maxval
-plt.imshow(img2,cmap='gist_gray')
-plt.show()
-plt.imshow(faked,cmap='gist_gray')
-plt.show()
+def show_img(image):
+    ### Normalize
+    minval= np.min(image)
+    maxval= np.max(image)
+    img2=(image-minval)/maxval
+    plt.imshow(img2,cmap='gist_gray')
+    plt.show()
