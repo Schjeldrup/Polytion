@@ -298,6 +298,7 @@ class Generator(torch.nn.Module):
     def forward(self, x): 
         # UserWarning: Bi-quadratic interpolation behavior has changed due to a bug in the implementation of scikit-image
         # Perhaps another bilinear interpolation method?
+        
         x = skimage.transform.resize(x, (self.imwidth, self.imheight), order=1, anti_aliasing=True)
         x = torch.tensor(x).float() # make tensor, no need for the very high precision
         x = x.reshape(self.s) # flatten to the 1D equivalent vector
@@ -305,10 +306,9 @@ class Generator(torch.nn.Module):
         x = self.PolyLayer(x)
         x = x.reshape(self.imwidth, self.imheight)
         return x
-
+""" 
 #net = Generator(FTT_Layer, N, rank, imwidth, imheight)
 net = Generator(PolyGAN_CP_Layer, N, rank, imwidth, imheight)
-
 output = net(low_res_sample)
 print("\noutput has shape", output.shape)
 
@@ -374,3 +374,4 @@ print("optm_timer =", mean(optm_timer), "s on average")
 print("loss_timer =", mean(loss_timer), "s on average")
 print("step_timer =", mean(step_timer), "s on average")
 
+"""
