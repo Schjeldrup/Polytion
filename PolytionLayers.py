@@ -298,7 +298,7 @@ class Generator(torch.nn.Module):
         #self.x = self.PolyLayer(self.x)
         self.x = self.x.reshape(self.bsize, self.c, self.imwidth, self.imheight)
         return self.x
-
+"""
 #net = Generator(FTT_Layer, N, rank, imwidth, imheight, scalefactor)
 net = Generator(PolyGAN_CP_Layer, N, rank, imwidth, imheight, scalefactor)
 
@@ -366,3 +366,4 @@ print("optm_timer =", mean(optm_timer)/batchsize, "s on average")
 print("loss_timer =", mean(loss_timer)/batchsize, "s on average")
 print("step_timer =", mean(step_timer)/batchsize, "s on average")
 
+"""

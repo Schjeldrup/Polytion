@@ -42,10 +42,11 @@ Generator
 # Save the desired order and rank of the following algorithms here:
 N = 5
 rank = 4
+scalefactor = 4
 
 # Save a standard set of inputs
 imwidth, imheight = 512, 512
-my_generator = PL.Generator(PL.PolyGAN_CP_Layer, N, rank, imwidth, imheight)
+my_generator = PL.Generator(PL.PolyGAN_CP_Layer, N, rank, imwidth, imheight, scalefactor)
 
 
 """
@@ -130,41 +131,42 @@ for epoch in range(num_epochs):
     """
     for i, data in enumerate(zip(real_data_loader,lowres_loader)):
         (realhighres, lowres) = data
-        true_label = torch.ones(batch_size, 1)#.to(device) 
-        fake_label = torch.zeros(batch_size, 1)#.to(device)
+        true_label = torch.ones(batch_size, 1).type('torch.DoubleTensor')#.to(device) 
+        fake_label = torch.zeros(batch_size, 1).type('torch.DoubleTensor')#.to(device)
         my_discriminator.zero_grad()
         my_generator.zero_grad()
-        print('before discriminator number: {}'.format(i))
-        # Step 1. Send real data through discriminator and backpropagate its errors.
-        realhighres=realhighres.view(batch_size,1,512,512)
-        x_true = Variable(realhighres)#.to(device)
+        
+        #define data
+        realhighres=realhighres.view(batch_size,1,512,512)#!!!
+        x_true = Variable(realhighres)#!!!.to(device)
         lowres=lowres.view(batch_size,1,128,128)
-        lowres = Variable(lowres)
+        lowres = Variable(lowres)#!!!
+        
+        
+        print('before discriminator number: {}'.format(i))
         output = my_discriminator(lowres,x_true)
 
-        error_true = loss(output, true_label.type('torch.DoubleTensor'))
+        error_true = loss(output, true_label)
         error_true.backward()
         print('before gen: {}'.format(i))
         # Step 2. Generate fake data G(z) 
-
-        x_fake = my_generator(lowres.view(128,128))
+        x_fake = my_generator(lowres.type('torch.FloatTensor'))
         x_fake = Variable(x_fake)
         # Step 3. Send fake data through discriminator
         #         propagate error and update D weights.
         # --------------------------------------------
         # Note: detach() is used to avoid updating generator gradients
         
-        output = my_discriminator(lowres,x_fake.view(batch_size,1,512,512).detach()) 
-
-        error_fake = loss(output, fake_label.type('torch.DoubleTensor'))
+        output = my_discriminator(lowres,x_fake.detach()) 
+        error_fake = loss(output, fake_label)
         error_fake.backward()
         discriminator_optim.step()
         print('before fake discriminator number: {}'.format(i))
         # Step 4. Send fake data through discriminator _again_
         #         propagate the error of the generator and
         #         update G weights.
-        output = my_discriminator(lowres,x_fake.view(batch_size,1,512,512))
-        error_generator = loss(output, true_label.type('torch.DoubleTensor'))
+        output = my_discriminator(lowres,x_fake)
+        error_generator = loss(output, true_label)
         error_generator.backward()
         generator_optim.step()
         batch_d_loss.append((error_true/(error_true + error_fake)).item())
