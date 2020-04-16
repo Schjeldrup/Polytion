@@ -18,7 +18,8 @@ import skimage.transform
 Loader
 """
 
-images=prep.load_images_from_folder('Images_png_01/Images_png/000001_01_01')
+#images=prep.load_images_from_folder('Images_png_01/Images_png/000001_01_01')
+images=prep.load_images_from_folder('/work3/projects/s181603-Jun-2020/Images_png/000047_08_01')
 
 lowresimages=prep.compress_images(images)
 
