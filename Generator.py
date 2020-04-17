@@ -1,6 +1,7 @@
 import torch
 import threading
 import logging
+
 logging.basicConfig(format='%(levelname)s:%(message)s',level=logging.DEBUG)
 class PolyGAN_CP_Layer(torch.nn.Module):
     def __init__(self, N, rank, imwidth, imheight, verbose = 0):
@@ -120,6 +121,7 @@ class FTT_Layer(torch.nn.Module):
             # Make tensors of size (r_{k-1}, n_{k} = self.s, r_{k})
             TTcore = torch.empty(self.ranklist[n], self.s, self.ranklist[n+1])
             torch.nn.init.xavier_normal_(TTcore)
+            #TTcore /= self.s
             self.TT.append(torch.nn.Parameter(TTcore))
 
         if self.verbose != 0:
