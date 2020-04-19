@@ -30,14 +30,14 @@ imwidth, imheight = 512, 512
 #Training parameters
 loss = nn.BCELoss() #We should try other loss-functions
 num_epochs = 200
-batch_size = 5
+batch_size = 13
 
 """
 Loader
 """
 
-images=prep.load_images_from_folder('Images_png_01/Images_png/000001_01_01')
-
+#images=prep.load_images_from_folder('Images_png_01/Images_png/000001_01_01')
+images=prep.load_images_from_folder('/work3/projects/s181603-Jun-2020/Images_png/000001_01_01/')
 lowresimages=prep.compress_images(images)
 
 lowres_loader = DataLoader(lowresimages, batch_size=batch_size)#, pin_memory=cuda)
@@ -69,8 +69,8 @@ gpu_discriminator = discriminator().to(device)
 
 
 #Learning rate
-generator_optim = torch.optim.Adam(my_generator.parameters(), 2e-4, betas=(0.5, 0.9))
-discriminator_optim = torch.optim.Adam(my_discriminator.parameters(), 2e-4, betas=(0.5, 0.9))
+generator_optim = torch.optim.Adam(my_generator.parameters(), 2e-2, betas=(0.5, 0.9))
+discriminator_optim = torch.optim.Adam(my_discriminator.parameters(), 2e-2, betas=(0.5, 0.9))
 
 lr_scheduler = np.linspace(0,2e-4,30)
 
@@ -152,6 +152,6 @@ ax.legend(['Discriminator', 'Generator'])
     
 print('exited')
 
-prep.show_img(my_generator(lowres.view(3,1,128,128).type('torch.FloatTensor')).detach().numpy()[0][0])
+prep.show_img(my_generator(lowres.type('torch.FloatTensor')).detach().numpy()[0][0])
 
 

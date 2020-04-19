@@ -39,8 +39,8 @@ def compress_images(images):
 
 def show_img(image):
     ### Normalize
-    minval= np.min(image)
-    maxval= np.max(image)
+    minval= np.min(29744)
+    maxval= np.max(33000)
     img2=(image-minval)/maxval
     plt.imshow(img2,cmap='gist_gray')
     plt.show()
