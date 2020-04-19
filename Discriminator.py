@@ -5,7 +5,6 @@ import torch.nn as nn
 class discriminator(nn.Module):
     def __init__(self,batch_size):
         super(discriminator, self).__init__()
-        self.batch_size = batch_size
         
         # On the {z_s,d}
         self.disc = nn.Sequential(
@@ -38,9 +37,9 @@ class discriminator(nn.Module):
         
     def forward(self, lowres,highres):
         upscaledlow=self.disc(lowres)
-        upscaledlow=upscaledlow.view(self.batch_size,1,512,512)
+        upscaledlow=upscaledlow.view(highres.size())
         combine= torch.cat([upscaledlow,highres], dim=1)
         res=self.disc2(combine)
-        res=res.view(self.batch_size,252004)
+        res=res.view(highres.size()[0],252004)
         res=self.disc3(res)
         return res

@@ -29,8 +29,8 @@ imwidth, imheight = 512, 512
 
 #Training parameters
 loss = nn.BCELoss() #We should try other loss-functions
-num_epochs = 1
-batch_size = 1
+num_epochs = 200
+batch_size = 5
 
 """
 Loader
@@ -42,6 +42,8 @@ lowresimages=prep.compress_images(images)
 
 lowres_loader = DataLoader(lowresimages, batch_size=batch_size)#, pin_memory=cuda)
 real_data_loader = DataLoader(images,batch_size=batch_size)
+
+prep.show_img(lowresimages[0])
 
 """
 GAN Structure
@@ -89,6 +91,7 @@ for epoch in range(num_epochs):
     """
     for i, data in enumerate(zip(real_data_loader,lowres_loader)):
         (realhighres, lowres) = data
+        batch_size=realhighres.size(0)
         true_label = torch.ones(batch_size, 1).type('torch.DoubleTensor')#.to(device) 
         fake_label = torch.zeros(batch_size, 1).type('torch.DoubleTensor')#.to(device)
         my_discriminator.zero_grad()
@@ -129,9 +132,26 @@ for epoch in range(num_epochs):
         generator_optim.step()
         batch_d_loss.append((error_true/(error_true + error_fake)).item())
         batch_g_loss.append(error_generator.item())
-        
+    
         
     discriminator_loss.append(np.mean(batch_d_loss))
     generator_loss.append(np.mean(batch_g_loss))
     
+
+# -- Plotting --
+f, axarr = plt.subplots(1, 2, figsize=(18, 7))
+
+# Loss
+ax = axarr[0]
+ax.set_xlabel('Epoch')
+ax.set_ylabel('Loss')
+    
+ax.plot(np.arange(epoch+1), discriminator_loss)
+ax.plot(np.arange(epoch+1), generator_loss, linestyle="--")
+ax.legend(['Discriminator', 'Generator'])
+    
+print('exited')
+
+prep.show_img(my_generator(lowres.view(3,1,128,128).type('torch.FloatTensor')).detach().numpy()[0][0])
+
 
