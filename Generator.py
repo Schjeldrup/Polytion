@@ -121,7 +121,7 @@ class FTT_Layer(torch.nn.Module):
             # Make tensors of size (r_{k-1}, n_{k} = self.s, r_{k})
             TTcore = torch.empty(self.ranklist[n], self.s, self.ranklist[n+1])
             torch.nn.init.xavier_normal_(TTcore)
-            #TTcore /= self.s
+            TTcore /= self.s
             self.TT.append(torch.nn.Parameter(TTcore))
 
         if self.verbose != 0:
@@ -152,7 +152,8 @@ class FTT_Layer(torch.nn.Module):
     def parallelVecProd(self, k):
         d1, d2 = self.ranklist[k], self.ranklist[k+1]
         tmp = torch.matmul(self.z, self.TT[k].permute(1,0,2).reshape(self.s, d1*d2))
-        self.V.data[k,0:d1,0:d2] = tmp.reshape(d1, d2)
+        with torch.no_grad():
+            self.V[k,0:d1,0:d2] = tmp.reshape(d1, d2)
         return
 
     def forward(self, z):
