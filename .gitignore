@@ -31,4 +31,7 @@ Network Trash Folder
 Temporary Items
 .apdisk
 .ipynb_checkpoints
+__pycache__
+
+
 
