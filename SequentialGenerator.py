@@ -45,15 +45,15 @@ class FTT_Layer(torch.nn.Module):
         return out
 
 
-class PolyNet(torch.nn.Module):
+class Generator(torch.nn.Module):
     def __init__(self, layer, N, rank, imwidth, imheight):
-        super(PolyNet, self).__init__()
+        super(Generator, self).__init__()
 
         self.c = 1
         self.imwidth, self.imheight = imwidth, imheight
         self.s = imwidth*imheight
         self.PolyLayer = layer(N, rank, imwidth, imheight, 0)
-        self.BN = nn.BatchNorm2d(num_features=1)
+        self.BN = torch.nn.BatchNorm2d(num_features=1)
 
     def forward(self, x):
         # Register dimensions:
