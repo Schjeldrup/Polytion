@@ -172,11 +172,12 @@ class FTT_Layer(torch.nn.Module):
 
 
 class Generator(torch.nn.Module):
-    def __init__(self, layer, N, rank, imwidth, imheight):
+    def __init__(self, layer, N, rank, imwidth, imheight,scalefactor):
         super(Generator, self).__init__()
 
         self.c = 1
         self.imwidth, self.imheight = imwidth, imheight
+        self.scalefactor=scalefactor
         self.s = imwidth*imheight
         self.PolyLayer = layer(N, rank, imwidth, imheight, 0)
         self.BN = torch.nn.BatchNorm2d(num_features=1)
@@ -202,6 +203,8 @@ class Generator(torch.nn.Module):
 
         # Register x as attribute for parallel access, and clone because dataset would be overwritten
         self.x = self.BN(x.clone())
+        upscale = torch.nn.Upsample(scale_factor=self.scalefactor, mode='bilinear', align_corners=False)
+        self.x = upscale(self.x)
         self.x = self.x.reshape(batch_size, self.c, self.s) # flatten to the 1D equivalent vector
 
         # Start n number of tasks per number of self.workers
@@ -229,14 +232,11 @@ class Generator(torch.nn.Module):
             currentThread = threading.Thread(target=self.BatchInParallel, args=(start, stop, queueindex))
             currentThread.start()
             threads.append(currentThread)
-
         # Wait for threads to end:
         for t in threads:
             t.join()
-
         for q in self.PolyLayer.QueueList:
             if not q.empty():
                 raise ValueError
-
         self.x = self.x.reshape(batch_size, self.c, self.imwidth, self.imheight)
         return self.x

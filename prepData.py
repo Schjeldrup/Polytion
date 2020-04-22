@@ -31,6 +31,14 @@ def load_images_from_all_folders(folder):
 #        images.append(img)
     return images
 
+def normalize(images):
+    ### Normalize
+    minval= 29744
+    maxval= 33000
+    for i in range(len(images)):
+        images[i]=(images[i]-minval)/maxval
+    return images
+
 def compress_images(images):
     img=[]
     for n in range(len(images)):
@@ -38,9 +46,5 @@ def compress_images(images):
     return img
 
 def show_img(image):
-    ### Normalize
-    minval= np.min(29744)
-    maxval= np.max(33000)
-    img2=(image-minval)/maxval
-    plt.imshow(img2,cmap='gist_gray')
+    plt.imshow(image,cmap='gist_gray')
     plt.show()

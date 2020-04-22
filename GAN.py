@@ -29,15 +29,17 @@ imwidth, imheight = 512, 512
 
 #Training parameters
 loss = nn.BCELoss() #We should try other loss-functions
-num_epochs = 200
-batch_size = 13
+num_epochs = 2
+batch_size = 5
 
 """
 Loader
 """
 
 #images=prep.load_images_from_folder('Images_png_01/Images_png/000001_01_01')
-images=prep.load_images_from_folder('/work3/projects/s181603-Jun-2020/Images_png/000001_01_01/')
+images=prep.load_images_from_folder('000001_01_01')
+#images=prep.load_images_from_folder('/work3/projects/s181603-Jun-2020/Images_png/000001_01_01/')
+images=prep.normalize(images)
 lowresimages=prep.compress_images(images)
 
 lowres_loader = DataLoader(lowresimages, batch_size=batch_size)#, pin_memory=cuda)
@@ -52,7 +54,7 @@ GAN Structure
 Generator
 """
 #Imports generator from file
-my_generator = gen.Generator(gen.FTT_Layer, batch_size, N, rank, imwidth, imheight, scalefactor)
+my_generator = gen.Generator(gen.FTT_Layer, N, rank, imwidth, imheight,scalefactor)
 
 
 """
