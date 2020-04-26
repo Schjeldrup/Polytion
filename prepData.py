@@ -42,7 +42,7 @@ def normalize(images):
 def compress_images(images):
     img=[]
     for n in range(len(images)):
-        img.append(transform.resize(images[0], (images[0].shape[0] / 4, images[0].shape[1] / 4), anti_aliasing=True))
+        img.append(transform.resize(images[n], (images[n].shape[0] / 4, images[n].shape[1] / 4), anti_aliasing=True))
     return img
 
 def show_img(image):
