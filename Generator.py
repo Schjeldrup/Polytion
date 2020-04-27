@@ -124,7 +124,7 @@ class FTT_Layer(torch.nn.Module):
             TTcore = torch.empty(self.ranklist[n], self.s, self.ranklist[n+1])
             torch.nn.init.xavier_normal_(TTcore)
             #torch.nn.init.xavier_uniform_(TTcore)
-            TTcore /= self.s
+            #TTcore /= self.s
             self.TT.append(torch.nn.Parameter(TTcore))
 
 
