@@ -46,7 +46,7 @@ class FTT_Layer(torch.nn.Module):
 
 
 class Generator(torch.nn.Module):
-    def __init__(self, layer, N, rank, imwidth, imheight):
+    def __init__(self, layer, N, rank, imwidth, imheight,scalefactor):
         super(Generator, self).__init__()
 
         self.c = 1
@@ -54,25 +54,27 @@ class Generator(torch.nn.Module):
         self.s = imwidth*imheight
         self.PolyLayer = layer(N, rank, imwidth, imheight, 0)
         self.BN = torch.nn.BatchNorm2d(num_features=1)
+        self.upsample = torch.nn.Upsample(scale_factor=scalefactor, mode='bilinear', align_corners=False)
 
     def forward(self, x):
         # Register dimensions:
         xshape = x.shape
         if len(xshape) == 2:
-            self.batch_size = 1
+            batch_size = 1
         elif len(xshape) == 4:
-            self.batch_size = xshape[0]
+            batch_size = xshape[0]
         else:
             raise ValueError
 
         # Register x as attribute for parallel access, and clone because dataset would be overwritten
         self.x = self.BN(x.clone())
+        self.x = self.upsample(self.x)
 
         #print('x.shape = ', x.shape)
-        self.x = self.x.reshape(self.batch_size, self.c, self.s) # flatten to the 1D equivalent vector
+        self.x = self.x.reshape(batch_size, self.c, self.s) # flatten to the 1D equivalent vector
 
-        for batch in range(self.batch_size):
+        for batch in range(batch_size):
             self.x[batch, self.c-1, :] = self.PolyLayer(self.x[batch, self.c-1, :])
 
-        self.x = self.x.reshape(self.batch_size, self.c, self.imwidth, self.imheight)
+        self.x = self.x.reshape(batch_size, self.c, self.imwidth, self.imheight)
         return self.x
