@@ -20,13 +20,13 @@ def load_images_from_folder(folder):
 
 def load_images_from_all_folders(folder):
     images = []
-    for root, dirs, files in os.walk(folder, topdown=True):   
+    for root, dirs, files in os.walk(folder, topdown=True):
         #one from each folder
         try:
             img = Image.open(os.path.join(root, files[0]))
             if np.size(np.asarray(img))==262144:
                 images.append(np.asarray(img))
-            img.close() 
+            img.close()
         except:
             print('Unable to open file')
         """
@@ -34,7 +34,7 @@ def load_images_from_all_folders(folder):
             img = Image.open(os.path.join(root, file))
             images.append(np.asarray(img))
             img.close()
-        """  
+        """
 #    for filename in os.listdir(folder):
 #        img = Image.open(os.path.join(folder,filename))
 #        images.append(img)
@@ -51,6 +51,21 @@ def normalize(images):
     maxval= 33000
     for i in range(len(images)):
         images[i]=(images[i]-minval)/maxval
+    return images
+
+def normalize_0(images):
+    ### Normalize to 0-1
+    normalized = []
+    for img in images:
+        lmin = np.float(np.min(img))
+        lmax = np.float(np.max(img))
+        normalized.append( (img - lmin)/(lmax-lmin) )
+    return normalized
+
+def normalize_32768(images):
+    ### Normalize to 0-1
+    for img in images:
+        img = img - 32768
     return images
 
 def compress_images(images):
