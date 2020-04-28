@@ -80,6 +80,7 @@ class PolyganCPlayer(PolyLayer):
         for n in range(self.N):
             # Perform parallel computation of the rank summation: tremendous speedup.
             currentThread = threading.Thread(target=self.parallelRankSum, args=(queue, z, n,))
+            currentThread.setDaemon(True)
             currentThread.start()
             threads.append(currentThread)
         # Wait for threads to end:
@@ -148,6 +149,7 @@ class PolyclassFTTlayer(PolyLayer):
         threads = []
         for k in range(1, self.N):
             currentThread = threading.Thread(target=self.parallelVecProd, args=(queue, z, k,))
+            currentThread.setDaemon(True)
             currentThread.start()
             threads.append(currentThread)
         # Wait for threads to end:
@@ -229,6 +231,7 @@ class Generator(torch.nn.Module):
             cumul += int(group.item())
             stop = cumul
             currentThread = threading.Thread(target=self.batchesInParallel, args=(start, stop, queueindex))
+            currentThread.setDaemon(True)
             currentThread.start()
             threads.append(currentThread)
         # Wait for threads to end:

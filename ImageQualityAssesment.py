@@ -3,21 +3,30 @@ import torch
 import torch.nn.functional as F
 from math import log10, exp, sqrt
 
-def psnr(img1, img2):
-    mse = numpy.mean( (img1 - img2) ** 2 )
-    
-    PIXEL_MAX = 255.0
-    return 20 * math.log10(PIXEL_MAX / math.sqrt(mse))
+from skimage.metrics import structural_similarity
 
 # See https://mkfmiku.github.io/loss-functions-in-image-enhancement/
 class PSNRLoss(torch.nn.Module):
     def __init__(self):
         super(PSNRLoss, self).__init__()
-
-
     def forward(self, img1, img2):
         mse = torch.mean((img1 - img2) ** 2)
-        return self.tvloss_weight * (h_tv + w_tv) / (b * c * h * w)
+        return 20 * torch.log10( 1.0 / torch.sqrt(mse))
+
+# See https://scikit-image.org/docs/dev/auto_examples/transform/plot_ssim.html
+class SkiMageSSIMLoss(torch.nn.Module):
+    def __init__(self):
+        super(SkiMageSSIMLoss, self).__init__()
+    def forward(self, img1, img2):
+        print(img1.shape)
+        b, c, w, h = img1.shape
+        ssim = 0
+        for i in range(b):
+            im1 = img1[i].reshape(w,h).detach().numpy()
+            im2 = img2[i].reshape(w,h).detach().numpy()
+            datrange = im1.max() - im2.min()
+            ssim += structural_similarity(im1, im2, data_range=datrange, multichannel=True)
+        return torch.tensor(ssim/b)
 
 
 # See https://github.com/Po-Hsun-Su/pytorch-ssim/blob/master/pytorch_ssim/__init__.py

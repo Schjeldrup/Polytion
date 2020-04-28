@@ -62,6 +62,7 @@ class Autoencoder(torch.nn.Module):
 MSE_lossfunc = torch.nn.MSELoss()
 TV_lossfunc = iqa.TVLoss()
 SSIM_lossfunc = iqa.SSIMLoss()
+PSNR_lossfunc = iqa.PSNRLoss()
 
 num_epochs = 10
 def train(model):
@@ -71,9 +72,6 @@ def train(model):
 
     epoch_loss = []
     all_loss = []
-    MSE = []
-    TV = []
-    SSIM = []
     optimizer = torch.optim.Adam(model.parameters(), lr=0.05, weight_decay=0.001)
 
     epochs = tqdm.trange(num_epochs, desc='Bar desc', leave=True)
@@ -89,20 +87,10 @@ def train(model):
                 LoResIm = LoResIm.to(device)
 
                 output = model(LoResIm).float()
-
-                MSE_loss = MSE_lossfunc(output, HiResIm).float()
-                TV_loss = TV_lossfunc(output).float()
-                SSIM_loss = SSIM_lossfunc(output, HiResIm).float()
-                loss = (1 - SSIM_loss)
+                #loss = MSE_lossfunc(output, HiResIm).float()
+                loss = -SSIM_lossfunc(output, HiResIm)
                 optimizer.zero_grad()
-                loss.backward(retain_graph = True)
-                MSE_loss.backward(retain_graph = True)
-                MSE.append(MSE_loss.item())
-                TV_loss.backward(retain_graph = True)
-                TV.append(TV_loss.item())
-                SSIM_loss.backward(retain_graph = True)
-                SSIM.append(SSIM_loss.item())
-
+                loss.backward()
                 optimizer.step()
                 lossvalue = loss.item()
                 all_loss.append(lossvalue)
@@ -122,7 +110,7 @@ def train(model):
 
 
 # ## 3. Training the different layers and generators:
-generatorOptions = {'parallel':True, 'workers':3}
+generatorOptions = {'parallel':True, 'workers':5}
 layerOptions = {'randnormweights':False, 'normalize':False, 'parallel':True}
 
 #PolyganCPlayer:
