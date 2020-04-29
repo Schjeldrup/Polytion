@@ -87,8 +87,8 @@ class TVLoss(torch.nn.Module):
         super(TVLoss, self).__init__()
         self.tvloss_weight = tvloss_weight
 
-    def forward(self, generated):
-        b, c, h, w = generated.size()
-        h_tv = torch.pow((generated[:, :, 1:, :] - generated[:, :, :(h - 1), :]), 2).sum()
-        w_tv = torch.pow((generated[:, :, :, 1:] - generated[:, :, :, :(w - 1)]), 2).sum()
-        return self.tvloss_weight * (h_tv + w_tv) / (b * c * h * w)
+    def forward(self, image):
+        b, c, h, w = image.size()
+        h_tv = torch.pow((image[:, :, 1:, :] - image[:, :, :(h - 1), :]), 2).sum()
+        w_tv = torch.pow((image[:, :, :, 1:] - image[:, :, :, :(w - 1)]), 2).sum()
+        return self.tvloss_weight * torch.sqrt(h_tv + w_tv) / (b * c * h * w)
