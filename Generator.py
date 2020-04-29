@@ -2,6 +2,8 @@ import torch
 import threading
 import queue
 
+from math import sqrt
+
 class PolyLayer(torch.nn.Module):
     def __init__(self, N, rank, s, randnormweights=True, parallel=True):
         # Start inherited structures:
@@ -127,7 +129,7 @@ class PolyclassFTTlayer(PolyLayer):
             TTcore = torch.empty(self.ranklist[n], self.s, self.ranklist[n+1])
             self.initweights(TTcore)
             if layeroptions['normalize']:
-                TTcore /= self.s
+                TTcore /= sqrt(self.s)
             self.TT.append(torch.nn.Parameter(TTcore))
 
     def forwardInSequence(self, z, queue):
