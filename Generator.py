@@ -32,6 +32,8 @@ class PolyganCPlayer(PolyLayer):
         # Initialize the bias
         b = torch.empty(self.s,1)
         self.initweights(b)
+        if layeroptions['normalize']:
+            b /= self.s
         self.b = torch.nn.Parameter(b.reshape(self.s))
         # Initialize the weights
         self.W = torch.nn.ParameterList()
@@ -43,11 +45,9 @@ class PolyganCPlayer(PolyLayer):
             for o in range(n + 1):
                 factor_matrix = torch.zeros((self.s, self.rank))
                 self.initweights(factor_matrix)
+                if layeroptions['normalize']:
+                    factor_matrix /= self.s
                 self.W.append(torch.nn.Parameter(factor_matrix))
-        if layeroptions['normalize']:
-            self.b /= self.s
-            for w in self.W:
-                w /= self.s
 
     def forwardInSequence(self, z, queue):
         # Simple and straightforward: see notes on github
