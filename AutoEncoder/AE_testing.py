@@ -32,7 +32,7 @@ else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
 # Parameters:
-batch_size = 20
+batch_size = 15
 N = 5
 rank = 15
 
@@ -62,9 +62,9 @@ else:
     with open(LRpath, 'wb') as handle:
         pickle.dump(LRimages, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-images=prep.load_images_from_folder('/work3/projects/s181603-Jun-2020/Images_png.old/000020_02_01/')
-HRimages = prep.normalize_0(images)
-LRimages = prep.compress_images(HRimages)
+#images=prep.load_images_from_folder('/work3/projects/s181603-Jun-2020/Images_png.old/000020_02_01/')
+#HRimages = prep.normalize_0(images)
+#LRimages = prep.compress_images(HRimages)
 
 HR_loader = torch.utils.data.DataLoader(HRimages,batch_size=batch_size)#, pin_memory=cuda)
 LR_loader = torch.utils.data.DataLoader(LRimages, batch_size=batch_size)#, pin_memory=cuda)
@@ -73,9 +73,7 @@ LR_loader = torch.utils.data.DataLoader(LRimages, batch_size=batch_size)#, pin_m
 
 class goldAutoencoder(torch.nn.Module):
     def __init__(self, layer, layerOptions, generatorOptions):
-        super(Autoencoder,self).__init__()
-        #self.encoder = g.Generator(layer, N, rank, bottleneck_dim, bottleneck_dim, downscalefactor, layerOptions, generatorOptions)
-        #self.decoder = g.Generator(layer, N, rank, HR_dim, HR_dim, scalefactor, layerOptions, generatorOptions)
+        super(goldAutoencoder,self).__init__()
         
         self.encoder = sgold.Generator(layer, N, rank, bottleneck_dim, bottleneck_dim, downscalefactor)
         self.decoder = sgold.Generator(layer, N, rank, HR_dim, HR_dim, scalefactor)
@@ -97,10 +95,11 @@ class Autoencoder(torch.nn.Module):
         return x
 
 lossfunc = torch.nn.SmoothL1Loss()
+#lossfunc = torch.nn.L1Loss()
 lossfunc = torch.nn.MSELoss()
-lr = 0.001
+lr = 0.005
 
-num_epochs = 5
+num_epochs = 100
 def train(model):
     model.train()
     if cuda:
@@ -108,7 +107,8 @@ def train(model):
 
     epoch_loss = []
     all_loss = []
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)#, weight_decay= 0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)#, weight_decay= 5e-4)
+    #optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.2)
 
     epochs = tqdm.trange(num_epochs, desc="Start training", leave=True)
     try:
@@ -119,10 +119,10 @@ def train(model):
                 b, c, h, w = HiResIm.size()
                 LoResIm = LoResIm.unsqueeze_(1).float()
                 HiResIm = torch.autograd.Variable(HiResIm).to(device)
-                LoResIm = LoResIm.to(device)
+                LoResIm = torch.autograd.Variable(LoResIm).to(device)
 
                 output = model(LoResIm).float()
-                loss = lossfunc(output, HiResIm).float() /(b*c*h*w)# + lf.TVLoss()(output).float()
+                loss = lossfunc(output, HiResIm).float() + lf.TVLoss()(output).float()
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -151,48 +151,42 @@ def train(model):
 
 
 # ## 3. Training the different layers and generators:
-generatorOptions = {'parallel':True, 'workers':10}
-layerOptions = {'randnormweights':True, 'normalize':False, 'parallel':False}
+generatorOptions = {'parallel':False, 'workers':10}
+layerOptions = {'randnormweights':False, 'normalize':False, 'parallel':False}
 
-#PolyganCPlayer:
-# model = Autoencoder(g.PolyganCPlayer, layerOptions, generatorOptions)
-#
-# epoch_loss = train(model)
-# plt.plot(epoch_loss)
-# plt.savefig('PolyganCPlayer.png', bbox_inches='tight')
-#
-# model.eval()
-# test = torch.tensor(LRimages[0]).reshape(1,1,LR_dim,LR_dim)
-# output = model(test).reshape(HR_dim,HR_dim)
-# torchvision.utils.save_image(output, "outputPolyganCPlayer.jpg")
-
-# PolyclassFTTlayer:
-#model = goldAutoencoder(gold.PolyGAN_CP_Layer, layerOptions, generatorOptions)
-model = Autoencoder(g.PolyclassFTTlayer, layerOptions, generatorOptions)
+#layer = gold.PolyGAN_CP_Layer
+#model = goldAutoencoder(layer, layerOptions, generatorOptions)
+layer = g.PolyclassFTTlayer
+#layer = g.PolyganCPlayer
+model = Autoencoder(layer, layerOptions, generatorOptions)
 epoch_loss = train(model)
 #epoch_loss = [0, 1, 2, 3]
 
 if epoch_loss[-1] == np.nan or epoch_loss[-1] == np.inf:
     sys.exit()
 
-fig, ax = plt.subplots(1,2, figsize=(15,8))
+fig, ax = plt.subplots(1,3, figsize=(15,5))
 ax[0].plot(epoch_loss)
 ax[0].grid(True)
 lossfuncname = str(lossfunc)[0:-2]
-ax[0].set_title(lossfuncname + "loss")
+ax[0].set_title(lossfuncname + "loss, lr = " + str(lr) + " " + str(layer))
 ax[0].set_xlabel('epochs')
-info = 'lr = ' + str(lr) 
-ax[0].text(0.01, 0.01, info)
 
 model.eval()
 test = torch.tensor(LRimages[0]).reshape(1,1,LR_dim,LR_dim)
 if cuda:
-        output = model(test).reshape(HR_dim,HR_dim).cpu().detach().numpy()
+    output = model(test).reshape(HR_dim,HR_dim).cpu().detach().numpy()
 else:
-	output = model(test).reshape(HR_dim,HR_dim).detach().numpy()
+    output = model(test).reshape(HR_dim,HR_dim).detach().numpy()
 
 ax[1].imshow(output, cmap='gray')
+ax[1].set_title("Output")
 ax[1].axis('off')
+
+ax[2].imshow(HRimages[0], cmap='gray')
+ax[2].grid(True)
+ax[2].set_title("Truth")
+ax[2].axis('off')
 #torchvision.utils.save_image(output, "outputPolyclassFTTlayer.jpg")
 
 #filename = str(lossfunc)[0:-2] + datetime.now().strftime("%d/%m/%Y_%H_%M_%S") + '.png'
