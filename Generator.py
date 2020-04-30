@@ -2,7 +2,7 @@ import torch
 import threading
 import queue
 
-from math import sqrt
+import math
 
 class PolyLayer(torch.nn.Module):
     def __init__(self, N, rank, s, randnormweights=True, parallel=True):
@@ -59,11 +59,27 @@ class PolyganCPlayer(PolyLayer):
             for r in range(self.rank):
                 f = 1
                 for k in range(1, n):
-                    f *= torch.dot(z, self.W[k][:,r])
+                    f *= torch.dot(z, self.W[n][:,r])
                 partialsum += self.W[0][:,r] * f
             Rsums[n] = partialsum
         queue.put(Rsums)
         return
+
+    def forwardInSequenceTest(self, z, queue):
+        # Simple and straightforward: see notes on github
+        Rsums = queue.get()
+        for n in range(self.N):
+            partialsum = 0
+            f = torch.ones(self.rank)
+            for k in range(1, n):
+                f *= torch.dot(z, self.W[k])
+            print("f = " + str(f.shape) + ", W = " + str(self.W[0].shape))
+            partialsum += f @ self.W[0] 
+            print("partialsum = " + str(partialsum.shape))
+            Rsums[n] = partialsum
+        queue.put(Rsums)
+        return
+
 
     def parallelRankSum(self, queue, z, n):
         Rsums = queue.get()
@@ -129,7 +145,8 @@ class PolyclassFTTlayer(PolyLayer):
             TTcore = torch.empty(self.ranklist[n], self.s, self.ranklist[n+1])
             self.initweights(TTcore)
             if layeroptions['normalize']:
-                TTcore /= sqrt(self.s)
+                TTcore /= math.pow(self.s, 3)
+                #TTcore /= math.pow(1.e25, 1/10)
             self.TT.append(torch.nn.Parameter(TTcore))
 
     def forwardInSequence(self, z, queue):
