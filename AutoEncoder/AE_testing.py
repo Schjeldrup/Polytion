@@ -152,7 +152,7 @@ def train(model):
 
 # ## 3. Training the different layers and generators:
 generatorOptions = {'parallel':False, 'workers':10}
-layerOptions = {'randnormweights':True, 'normalize':False, 'parallel':False}
+layerOptions = {'randnormweights':False, 'normalize':False, 'parallel':False}
 
 #layer = gold.PolyGAN_CP_Layer
 #model = goldAutoencoder(layer, layerOptions, generatorOptions)

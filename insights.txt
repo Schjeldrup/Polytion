@@ -1,6 +1,8 @@
 FTT layers (tensor trains) are fast but very very difficult to train
-Normalizing (dividing by dimension) yields nan evry time!
+Normalizing (dividing by dimension) yields nan every time!
 TV loss inclusion does not seem to iprove quality, but only tested on FTT so far...
 The old CP layer structure (1st generation) is still capable of learning the most?
+No: the problem is the parallel implementation
+
 MNIST: different training needed
 
