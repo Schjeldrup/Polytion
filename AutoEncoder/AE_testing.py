@@ -34,7 +34,7 @@ else:
 # Parameters:
 batch_size = 15
 N = 5
-rank = 10
+rank = 15
 
 LR_dim = 128
 HR_dim = 512
@@ -97,9 +97,9 @@ class Autoencoder(torch.nn.Module):
 lossfunc = torch.nn.SmoothL1Loss()
 #lossfunc = torch.nn.L1Loss()
 lossfunc = torch.nn.MSELoss()
-lr = 0.002
+lr = 0.005
 
-num_epochs = 200
+num_epochs = 100
 def train(model):
     model.train()
     if cuda:
@@ -107,7 +107,7 @@ def train(model):
 
     epoch_loss = []
     all_loss = []
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay= 5e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)#, weight_decay= 5e-4)
     #optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.2)
 
     epochs = tqdm.trange(num_epochs, desc="Start training", leave=True)
@@ -122,7 +122,7 @@ def train(model):
                 LoResIm = torch.autograd.Variable(LoResIm).to(device)
 
                 output = model(LoResIm).float()
-                loss = lossfunc(output, HiResIm).float()/(b*c*w*h) + lf.TVLoss()(output).float()
+                loss = lossfunc(output, HiResIm).float() + lf.TVLoss()(output).float()
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -152,13 +152,12 @@ def train(model):
 
 # ## 3. Training the different layers and generators:
 generatorOptions = {'parallel':False, 'workers':10}
-layerOptions = {'randnormweights':True, 'normalize':True, 'parallel':False}
+layerOptions = {'randnormweights':True, 'normalize':False, 'parallel':False}
 
 #layer = gold.PolyGAN_CP_Layer
 #model = goldAutoencoder(layer, layerOptions, generatorOptions)
-
-#layer = g.PolyclassFTTlayer # normalizations doesn't work, don't use TVloss
-layer = g.PolyganCPlayer
+layer = g.PolyclassFTTlayer
+#layer = g.PolyganCPlayer
 model = Autoencoder(layer, layerOptions, generatorOptions)
 epoch_loss = train(model)
 #epoch_loss = [0, 1, 2, 3]

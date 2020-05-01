@@ -84,7 +84,7 @@ class SSIMLoss(torch.nn.Module):
 # See https://mkfmiku.github.io/loss-functions-in-image-enhancement/
 # See also Remi Flamary for how to use L2 and TV together
 class TVLoss(torch.nn.Module):
-    def __init__(self, tvloss_weight=1e-5):
+    def __init__(self, tvloss_weight=1e-3):
         super(TVLoss, self).__init__()
         self.tvloss_weight = tvloss_weight
 
@@ -92,7 +92,7 @@ class TVLoss(torch.nn.Module):
         b, c, h, w = image.size()
         h_tv = torch.pow((image[:, :, 1:, :] - image[:, :, :(h - 1), :]), 2).sum()
         w_tv = torch.pow((image[:, :, :, 1:] - image[:, :, :, :(w - 1)]), 2).sum()
-        return self.tvloss_weight * torch.sqrt(h_tv + w_tv) / (b*c*w*h)
+        return self.tvloss_weight * torch.sqrt(h_tv + w_tv) #/ (b*c*w*h)
 
 
 
