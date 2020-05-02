@@ -137,7 +137,6 @@ def train(model):
 
                 epochs.set_description("Loss = " + str(lossvalue))
                 epochs.refresh()
-                break
 
             epoch_loss.append(np.mean(batch_loss))
         print("training finished")
