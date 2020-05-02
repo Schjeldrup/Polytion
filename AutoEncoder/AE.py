@@ -16,8 +16,6 @@ import time
 import tqdm
 
 from Polytion import Generator as g
-from Polytion import GeneratorMultiprocessed as g
-
 from Polytion import prepData as prep
 from Polytion import LossFunctions as lf
 
