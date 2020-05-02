@@ -17,6 +17,7 @@ class PolyLayer(torch.nn.Module):
         self.N = N
         self.rank = rank
         self.s = s
+        self.weightgain = 1.0
         # Necessary for threads:
         self.parallel = parallel
         if randnormweights:
@@ -33,7 +34,7 @@ class PolyganCPlayer(PolyLayer):
 
         # Initialize the bias
         b = torch.empty(self.s,1)
-        self.initweights(b)
+        self.initweights(b, self.weightgain)
         if layeroptions['normalize']:
             b /= self.s
         self.b = torch.nn.Parameter(b.reshape(self.s))
@@ -46,7 +47,7 @@ class PolyganCPlayer(PolyLayer):
             self.shapelist.append(tshape)
             for o in range(n + 1):
                 factor_matrix = torch.zeros((self.s, self.rank))
-                self.initweights(factor_matrix)
+                self.initweights(factor_matrix, self.weightgain)
                 if layeroptions['normalize']:
                     factor_matrix /= self.s
                 self.W.append(torch.nn.Parameter(factor_matrix))
@@ -140,7 +141,7 @@ class PolyclassFTTlayer(PolyLayer):
         for n in range(self.N):
             # Make tensors of size (r_{k-1}, n_{k} = self.s, r_{k})
             TTcore = torch.empty(self.ranklist[n], self.s, self.ranklist[n+1])
-            self.initweights(TTcore)
+            self.initweights(TTcore, self.weightgain)
             if layeroptions['normalize']:
                 TTcore /= sqrt(self.s)
             self.TT.append(torch.nn.Parameter(TTcore))
