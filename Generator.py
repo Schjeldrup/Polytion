@@ -55,6 +55,19 @@ class PolyganCPlayer(PolyLayer):
         # Simple and straightforward: see notes on github
         Rsums = queue.get()
         for n in range(self.N):
+            f = torch.ones(self.rank)
+            for k in range(1, n):
+                res = torch.matmul(z, self.W[k])
+                f = f * res
+            Rsums[n] = torch.matmul(self.W[0], f)
+        queue.put(Rsums)
+        return
+
+
+    def forwardInSequenceOld(self, z, queue):
+        # Simple and straightforward: see notes on github
+        Rsums = queue.get()
+        for n in range(self.N):
             partialsum = 0
             for r in range(self.rank):
                 f = 1
