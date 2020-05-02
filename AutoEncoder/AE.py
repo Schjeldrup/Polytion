@@ -16,8 +16,8 @@ import time
 import tqdm
 
 from Polytion import Generator as g
-from Polytion.Polynomial_generator_exploration import Generator as gold
-from Polytion.Polynomial_generator_exploration import SequentialGenerator as sgold
+from Polytion import GeneratorMultiprocessed as g
+
 from Polytion import prepData as prep
 from Polytion import LossFunctions as lf
 
@@ -32,7 +32,7 @@ else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
 # Parameters:
-batch_size = 15
+batch_size = 4
 N = 5
 rank = 15
 
@@ -68,6 +68,7 @@ else:
 
 HR_loader = torch.utils.data.DataLoader(HRimages,batch_size=batch_size)#, pin_memory=cuda)
 LR_loader = torch.utils.data.DataLoader(LRimages, batch_size=batch_size)#, pin_memory=cuda)
+
 #HR_loader = torch.utils.data.DataLoader(HRimages[:20],batch_size=batch_size) #pin_memory=cuda)
 #LR_loader = torch.utils.data.DataLoader(LRimages[:20], batch_size=batch_size) #pin_memory=cuda)
 
@@ -81,6 +82,20 @@ class Autoencoder(torch.nn.Module):
         x = self.encoder(x.float())
         x = self.decoder(x)
         return x
+
+# For quick testing:
+# generatorOptions = {'parallel':False, 'workers':10}
+# layerOptions = {'randnormweights':False, 'normalize':False, 'parallel':True}
+#
+# layer = g.PolyclassFTTlayer
+# layer = g.PolyganCPlayer
+# model = Autoencoder(layer, layerOptions, generatorOptions)
+# test = torch.tensor(LRimages[0]).reshape(1,1,LR_dim,LR_dim)
+#
+# output = model(test)
+# print("Succes")
+# sys.exit()
+#####
 
 lossfunc = torch.nn.SmoothL1Loss()
 #lossfunc = torch.nn.L1Loss()
@@ -96,7 +111,6 @@ def train(model):
     epoch_loss = []
     all_loss = []
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)#, weight_decay= 5e-4)
-    #optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.2)
 
     epochs = tqdm.trange(num_epochs, desc="Start training", leave=True)
     try:
@@ -123,6 +137,7 @@ def train(model):
 
                 epochs.set_description("Loss = " + str(lossvalue))
                 epochs.refresh()
+                break
 
             epoch_loss.append(np.mean(batch_loss))
         print("training finished")
@@ -134,18 +149,21 @@ def train(model):
         print("\nnan found ..")
         print("loss = ", all_loss)
         sys.exit()
-    #print("loss = ", all_loss)
     return epoch_loss
 
 
 # ## 3. Training the different layers and generators:
-generatorOptions = {'parallel':False, 'workers':10}
+#torch.autograd.set_detect_anomaly(True)
+generatorOptions = {'parallel':True, 'workers':2}
 layerOptions = {'randnormweights':False, 'normalize':False, 'parallel':False}
 
 layer = g.PolyclassFTTlayer
 layer = g.PolyganCPlayer
 model = Autoencoder(layer, layerOptions, generatorOptions)
+start = time.time()
 epoch_loss = train(model)
+print("Training took ", time.time() - start, "s to complete")
+
 #epoch_loss = [0, 1, 2, 3]
 
 if epoch_loss[-1] == np.nan or epoch_loss[-1] == np.inf:
@@ -177,4 +195,4 @@ ax[2].axis('off')
 
 #filename = str(lossfunc)[0:-2] + datetime.now().strftime("%d/%m/%Y_%H_%M_%S") + '.png'
 filename = "AutoEncoder/" + str(lossfunc)[0:-2] + time.strftime("%d-%m-%Y_%H:%M:%S") + ".png"
-plt.savefig(filename, bbox_inches='tight')
+#plt.savefig(filename, bbox_inches='tight')
