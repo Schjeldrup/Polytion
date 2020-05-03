@@ -16,8 +16,6 @@ import time
 import tqdm
 
 from Polytion import Generator as g
-from Polytion import GeneratorMultiprocessed as g
-
 from Polytion import prepData as prep
 from Polytion import LossFunctions as lf
 
@@ -32,13 +30,13 @@ else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
 # Parameters:
-batch_size = 4
+batch_size = 15
 N = 5
 rank = 15
 
 LR_dim = 128
 HR_dim = 512
-bottleneck_dim = 32
+bottleneck_dim = 64
 
 scalefactor = HR_dim/bottleneck_dim
 downscalefactor = bottleneck_dim/LR_dim
@@ -53,14 +51,14 @@ else:
     images = prep.load_images_from_folder(imagefolderpath)
     HRimages = prep.normalize_0(images)
     with open(HRpath, 'wb') as handle:
-        pickle.dump(HRimages, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(HRimages, handle)#, protocol=pickle.HIGHEST_PROTOCOL)
 if os.path.exists(LRpath):
     with open(LRpath, 'rb') as handle:
         LRimages = pickle.load(handle)
 else:
     LRimages = prep.compress_images(HRimages)
     with open(LRpath, 'wb') as handle:
-        pickle.dump(LRimages, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(LRimages, handle)#, protocol=pickle.HIGHEST_PROTOCOL)
 
 #images=prep.load_images_from_folder('/work3/projects/s181603-Jun-2020/Images_png.old/000020_02_01/')
 #HRimages = prep.normalize_0(images)
@@ -86,23 +84,22 @@ class Autoencoder(torch.nn.Module):
 # For quick testing:
 # generatorOptions = {'parallel':False, 'workers':10}
 # layerOptions = {'randnormweights':False, 'normalize':False, 'parallel':True}
-#
+
 # layer = g.PolyclassFTTlayer
 # layer = g.PolyganCPlayer
 # model = Autoencoder(layer, layerOptions, generatorOptions)
 # test = torch.tensor(LRimages[0]).reshape(1,1,LR_dim,LR_dim)
-#
+
 # output = model(test)
 # print("Succes")
 # sys.exit()
 #####
 
-lossfunc = torch.nn.SmoothL1Loss()
+#lossfunc = torch.nn.SmoothL1Loss()
 #lossfunc = torch.nn.L1Loss()
 lossfunc = torch.nn.MSELoss()
-lr = 0.005
+TV_weight = 0
 
-num_epochs = 1
 def train(model):
     model.train()
     if cuda:
@@ -110,8 +107,18 @@ def train(model):
 
     epoch_loss = []
     all_loss = []
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)#, weight_decay= 5e-4)
+    optimizer_name = torch.optim.Adam
+    lr = 0.01
+    w_decay = 0
+    optimizer = optimizer_name(model.parameters(), lr=lr, weight_decay=w_decay)
+    gamma = 0.9
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma, last_epoch=-1)
+    # Make info for suptitile
+    info = str(layer)[27:-2] + ": " + str(optimizer_name)[25:-2] + " with " + str(scheduler)[26:-26]
+    info += ", lr_init = " + str(lr) + ", w_decay = " + str(w_decay) +", gamma = " + str(gamma)
 
+    num_epochs = 100
+    start = time.time()
     epochs = tqdm.trange(num_epochs, desc="Start training", leave=True)
     try:
         for epoch in epochs:
@@ -124,7 +131,8 @@ def train(model):
                 LoResIm = torch.autograd.Variable(LoResIm).to(device)
 
                 output = model(LoResIm).float()
-                loss = lossfunc(output, HiResIm).float() + lf.TVLoss()(output).float()
+                loss = lossfunc(output, HiResIm).float() + lf.TVLoss(TV_weight)(output).float()
+                loss /= (b*c*w*h)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -135,12 +143,12 @@ def train(model):
                 if torch.isnan(loss).sum() > 0:
                     raise ValueError
 
-                epochs.set_description("Loss = " + str(lossvalue))
+                epochs.set_description("Loss = {:.6e}".format(lossvalue))
                 epochs.refresh()
-                break
+                scheduler.step()
 
             epoch_loss.append(np.mean(batch_loss))
-        print("training finished")
+        print("Training finished, took ", round(time.time() - start,2), "s to complete")
     except (KeyboardInterrupt, SystemExit):
         print("\nscript execution halted ..")
         print("loss = ", all_loss)
@@ -149,31 +157,31 @@ def train(model):
         print("\nnan found ..")
         print("loss = ", all_loss)
         sys.exit()
-    return epoch_loss
+    return epoch_loss, info
 
 
 # ## 3. Training the different layers and generators:
 #torch.autograd.set_detect_anomaly(True)
-generatorOptions = {'parallel':True, 'workers':2}
-layerOptions = {'randnormweights':False, 'normalize':False, 'parallel':False}
+generatorOptions = {'parallel':False, 'workers':2}
+layerOptions = {'randnormweights':False, 'normalize':True, 'parallel':False}
 
 layer = g.PolyclassFTTlayer
 layer = g.PolyganCPlayer
 model = Autoencoder(layer, layerOptions, generatorOptions)
-start = time.time()
-epoch_loss = train(model)
-print("Training took ", time.time() - start, "s to complete")
 
-#epoch_loss = [0, 1, 2, 3]
+epoch_loss, info = train(model)
 
 if epoch_loss[-1] == np.nan or epoch_loss[-1] == np.inf:
+    print("Error: Inf or Nan found")
     sys.exit()
 
 fig, ax = plt.subplots(1,3, figsize=(15,5))
+fig.suptitle(info, fontsize=10)
 ax[0].plot(epoch_loss)
+ax[0].set_yscale('log')
 ax[0].grid(True)
-lossfuncname = str(lossfunc)[0:-2]
-ax[0].set_title(lossfuncname + "loss, lr = " + str(lr) + " " + str(layer))
+lossfuncname = str(lossfunc)[0:-2] + " + " + str(TV_weight) + " * TV"
+ax[0].set_title(lossfuncname + "loss")
 ax[0].set_xlabel('epochs')
 
 model.eval()
@@ -188,11 +196,11 @@ ax[1].set_title("Output")
 ax[1].axis('off')
 
 ax[2].imshow(HRimages[0], cmap='gray')
-ax[2].grid(True)
 ax[2].set_title("Truth")
 ax[2].axis('off')
 #torchvision.utils.save_image(output, "outputPolyclassFTTlayer.jpg")
 
 #filename = str(lossfunc)[0:-2] + datetime.now().strftime("%d/%m/%Y_%H_%M_%S") + '.png'
 filename = "AutoEncoder/" + str(lossfunc)[0:-2] + time.strftime("%d-%m-%Y_%H:%M:%S") + ".png"
-#plt.savefig(filename, bbox_inches='tight')
+fig.savefig(filename, bbox_inches='tight')
+plt.show()

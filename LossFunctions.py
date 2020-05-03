@@ -92,7 +92,7 @@ class TVLoss(torch.nn.Module):
         b, c, h, w = image.size()
         h_tv = torch.pow((image[:, :, 1:, :] - image[:, :, :(h - 1), :]), 2).sum()
         w_tv = torch.pow((image[:, :, :, 1:] - image[:, :, :, :(w - 1)]), 2).sum()
-        return self.tvloss_weight * torch.sqrt(h_tv + w_tv) #/ (b*c*w*h)
+        return self.tvloss_weight * torch.sqrt(h_tv + w_tv)
 
 
 

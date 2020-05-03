@@ -42,15 +42,23 @@ class PolyganCPlayer(PolyLayer):
         self.W = torch.nn.ParameterList()
         self.shapelist = []
         # 0th order: bias [s], 1st order: weight [s, s], 2nd order: weight [s, s, s], ...
+        # for n in range(1, N + 1):
+        #     tshape = [self.s]*(n + 1)
+        #     self.shapelist.append(tshape)
+        #     for o in range(n + 1):
+        #         factor_matrix = torch.zeros((self.s, self.rank))
+        #         self.initweights(factor_matrix, self.weightgain)
+        #         if layeroptions['normalize']:
+        #             factor_matrix /= self.s
+        #         self.W.append(torch.nn.Parameter(factor_matrix))
         for n in range(1, N + 1):
             tshape = [self.s]*(n + 1)
             self.shapelist.append(tshape)
-            for o in range(n + 1):
-                factor_matrix = torch.zeros((self.s, self.rank))
-                self.initweights(factor_matrix, self.weightgain)
-                if layeroptions['normalize']:
-                    factor_matrix /= self.s
-                self.W.append(torch.nn.Parameter(factor_matrix))
+            factor_matrix = torch.zeros((self.s, self.rank))
+            self.initweights(factor_matrix, self.weightgain)
+            if layeroptions['normalize']:
+                factor_matrix /= self.s
+            self.W.append(torch.nn.Parameter(factor_matrix))
 
     def forwardInSequence(self, z, queue):
         # Simple and straightforward: see notes on github
@@ -63,7 +71,6 @@ class PolyganCPlayer(PolyLayer):
             Rsums[n] = torch.matmul(self.W[0], f)
         queue.put(Rsums)
         return
-
 
     def forwardInSequenceOld(self, z, queue):
         # Simple and straightforward: see notes on github
