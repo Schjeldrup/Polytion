@@ -25,6 +25,7 @@ class PolyLayer(torch.nn.Module):
         else:
             self.initweights = torch.nn.init.xavier_uniform_
         self.QueueList = [queue.Queue()]
+        self.Lock = threading.Lock()
 
 
 class PolyganCPlayer(PolyLayer):
@@ -102,6 +103,7 @@ class PolyganCPlayer(PolyLayer):
         for n in range(self.N):
             # Perform parallel computation of the rank summation: tremendous speedup.
             currentThread = threading.Thread(target=self.parallelRankSum, args=(queue, z, n,))
+            currentThread.setDaemon(True)
             currentThread.start()
             threads.append(currentThread)
         # Wait for threads to end:
@@ -155,9 +157,20 @@ class PolyclassFTTlayer(PolyLayer):
 
     def forwardInSequence(self, z, queue):
         V = queue.get()
-        for k in range(1, self.N):
-            d1, d2 = self.ranklist[k], self.ranklist[k+1]
-            V[k,0:d1,0:d2] = torch.matmul(z, self.TT[k].permute(1,0,2).reshape(self.s, d1*d2)).reshape(d1, d2)
+        b, c, w, h = z.shape
+        # for k in range(1, self.N):
+        #     d1, d2 = self.ranklist[k], self.ranklist[k+1]
+        #     # print("in:")
+        #     # print(V[:, :, k,0:d1,0:d2].shape)
+        #     # print(z.shape)
+        #     # print(self.TT[k].permute(1,0,2).reshape(self.s, d1*d2).shape)
+        #     # print("output:")
+        #     # print(torch.matmul(z, self.TT[k].permute(1,0,2).reshape(self.s, d1*d2)).shape)
+        #     # print(torch.matmul(z, self.TT[k].permute(1,0,2).reshape(self.s, d1*d2)).reshape(b-1, c-1, d1, d2).shape)
+
+        #     V[:, :, k,0:d1,0:d2] = torch.matmul(z, self.TT[k].permute(1,0,2).reshape(self.s, d1*d2)).reshape(b, c, d1, d2)
+        V[:, :, 0:d1,0:d2] = torch.matmul(z, self.TT[k].permute(1,0,2).reshape(self.s, d1*d2)).reshape(b, c, d1, d2)
+
         queue.put(V)
         return
 
@@ -172,6 +185,7 @@ class PolyclassFTTlayer(PolyLayer):
         threads = []
         for k in range(1, self.N):
             currentThread = threading.Thread(target=self.parallelVecProd, args=(queue, z, k,))
+            currentThread.setDaemon(True)
             currentThread.start()
             threads.append(currentThread)
         # Wait for threads to end:
@@ -181,24 +195,29 @@ class PolyclassFTTlayer(PolyLayer):
 
     def forward(self, z, queueindex=0):
         z = z.clone()
+        print("Come in")
+        b, c, w, h = z.shape
         # Put V in the right queue
-        V = torch.empty(self.N, self.rank, self.rank)
-        if queueindex > len(self.QueueList):
+        V = torch.zeros(b, c, self.N, self.rank, self.rank)
+        if queueindex > len(self.QueueList)-1:
+            print("Queueindex problems!")
             raise ValueError
         currentQueue = self.QueueList[queueindex]
         currentQueue.put(V)
-
+        print("Before")
         if self.parallel:
             self.forwardInParallel(z, currentQueue)
         else:
             self.forwardInSequence(z, currentQueue)
-
+        print("After")
         # Start the whole product chain now, so that we have [(1),s,r] x [r, r] x ... x [r, (1)] = s
         V = currentQueue.get()
         f = self.TT[0][0]
+        print(f.shape)
         for k in range(1, self.N):
             d1, d2 = self.ranklist[k], self.ranklist[k+1]
-            f = torch.matmul(f, V[k,0:d1,0:d2])
+            f = torch.matmul(f, V[:,:, k,0:d1,0:d2])
+            print(f.shape)
         # By now the current queue should be empty:
         if not currentQueue.empty():
             raise ValueError
@@ -218,10 +237,12 @@ class Generator(torch.nn.Module):
         # Number of workers per computation
         self.parallel = generatoroptions['parallel']
         self.workers = generatoroptions['workers']
+        self.Lock = threading.Lock()
 
     def generatorInSequence(self):
-        for batch in range(self.batch_size):
-            self.x[batch, self.c-1] = self.PolyLayer(self.x[batch, self.c-1])
+        # for batch in range(self.batch_size):
+        #     self.x[batch, self.c-1] = self.PolyLayer(self.x[batch, self.c-1])
+        self.PolyLayer(self.x)
         return
 
     def batchesInParallel(self, start, stop, queueindex):
@@ -252,6 +273,7 @@ class Generator(torch.nn.Module):
             cumul += int(group.item())
             stop = cumul
             currentThread = threading.Thread(target=self.batchesInParallel, args=(start, stop, queueindex))
+            currentThread.setDaemon(True)
             currentThread.start()
             threads.append(currentThread)
         # Wait for threads to end:

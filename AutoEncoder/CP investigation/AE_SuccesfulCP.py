@@ -16,7 +16,6 @@ import time
 import tqdm
 
 from Polytion import Generator as g
-#from Polytion import GeneratorForSeqFTT as g
 from Polytion import prepData as prep
 from Polytion import LossFunctions as lf
 
@@ -31,13 +30,13 @@ else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
 # Parameters:
-batch_size = 5
-N = 4
-rank = 20
+batch_size = 15
+N = 5
+rank = 15
 
 LR_dim = 128
 HR_dim = 512
-bottleneck_dim = 32
+bottleneck_dim = 64
 
 scalefactor = HR_dim/bottleneck_dim
 downscalefactor = bottleneck_dim/LR_dim
@@ -87,6 +86,7 @@ class Autoencoder(torch.nn.Module):
 # layerOptions = {'randnormweights':False, 'normalize':False, 'parallel':True}
 
 # layer = g.PolyclassFTTlayer
+# layer = g.PolyganCPlayer
 # model = Autoencoder(layer, layerOptions, generatorOptions)
 # test = torch.tensor(LRimages[0]).reshape(1,1,LR_dim,LR_dim)
 
@@ -98,7 +98,7 @@ class Autoencoder(torch.nn.Module):
 #lossfunc = torch.nn.SmoothL1Loss()
 #lossfunc = torch.nn.L1Loss()
 lossfunc = torch.nn.MSELoss()
-TV_weight = 0
+TV_weight = 0 #1.e-5
 
 def train(model):
     model.train()
@@ -108,7 +108,7 @@ def train(model):
     epoch_loss = []
     all_loss = []
     optimizer_name = torch.optim.Adam
-    lr = 0.005
+    lr = 0.01
     w_decay = 0
     optimizer = optimizer_name(model.parameters(), lr=lr, weight_decay=w_decay)
     gamma = 0.9
@@ -151,22 +151,22 @@ def train(model):
         print("Training finished, took ", round(time.time() - start,2), "s to complete")
     except (KeyboardInterrupt, SystemExit):
         print("\nscript execution halted ..")
-        #print("loss = ", all_loss)
+        print("loss = ", all_loss)
         sys.exit()
     except ValueError:
         print("\nnan found ..")
-        #print("loss = ", all_loss)
+        print("loss = ", all_loss)
         sys.exit()
     return epoch_loss, info
 
 
 # ## 3. Training the different layers and generators:
 #torch.autograd.set_detect_anomaly(True)
-generatorOptions = {'parallel':False, 'workers':2}
-layerOptions = {'randnormweights':True, 'normalize':False, 'parallel':False}
+generatorOptions = {'parallel':False, 'workers':4}
+layerOptions = {'randnormweights':False, 'normalize':True, 'parallel':False}
 
 layer = g.PolyclassFTTlayer
-#layer = g.PolyganCPlayer
+layer = g.PolyganCPlayer
 model = Autoencoder(layer, layerOptions, generatorOptions)
 
 epoch_loss, info = train(model)
@@ -174,6 +174,13 @@ epoch_loss, info = train(model)
 if epoch_loss[-1] == np.nan or epoch_loss[-1] == np.inf:
     print("Error: Inf or Nan found")
     sys.exit()
+
+
+# torch.save(model, "Trained_CP_model")
+# print("Dump succesful")
+# model2 = torch.load(model, "Trained_CP_model")
+# model = model2
+# print("Load succesful")
 
 fig, ax = plt.subplots(1,4, figsize=(20,5))
 fig.suptitle(info, fontsize=10)
@@ -205,7 +212,6 @@ ax[3].set_title("Truth")
 ax[3].axis('off')
 #torchvision.utils.save_image(output, "outputPolyclassFTTlayer.jpg")
 
-#filename = str(lossfunc)[0:-2] + datetime.now().strftime("%d/%m/%Y_%H_%M_%S") + '.png'
 filename = "AutoEncoder/" + str(lossfunc)[0:-2] + time.strftime("%d-%m-%Y_%H:%M:%S") + ".png"
 fig.savefig(filename, bbox_inches='tight')
 plt.show()
