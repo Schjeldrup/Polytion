@@ -27,6 +27,28 @@ class PolyLayer(torch.nn.Module):
         self.QueueList = [queue.Queue()]
 
 
+class PolyLayer_seq(torch.nn.Module):
+    def __init__(self, N, rank, s, randnormweights=True, parallel=True):
+        # Start inherited structures:
+        torch.nn.Module.__init__(self)
+        # N = order of the polynomial = order of the tensor A:
+        # A is of dimension (s, s, ..., s) = (N x s)
+        # rank = rank used for the tensor cores
+        # size = length of the flattened input
+        # randnormweights = whether to use random weight initialization
+        # normalize = whether to divide each weight by size self.s, as suggested by Morten
+        self.N = N
+        self.rank = rank
+        self.s = s
+        self.weightgain = 1.0
+        # Necessary for threads:
+        if randnormweights:
+            self.initweights = torch.nn.init.xavier_normal_
+        else:
+            self.initweights = torch.nn.init.xavier_uniform_
+
+
+
 class PolyganCPlayer(PolyLayer):
     def __init__(self, N, rank, imwidth, imheight, layeroptions):
         PolyLayer.__init__(self, N, rank, imwidth*imheight, randnormweights=layeroptions['randnormweights'], parallel=layeroptions['parallel'])
@@ -133,6 +155,39 @@ class PolyganCPlayer(PolyLayer):
         return Nsum + self.b
 
 
+class PolyganCPlayer_seq(PolyLayer_seq):
+    def __init__(self, N, rank, imwidth, imheight, layeroptions):
+        PolyLayer_seq.__init__(self, N, rank, imwidth*imheight, randnormweights=layeroptions['randnormweights'], parallel=layeroptions['parallel'])
+
+        # Initialize the bias
+        b = torch.empty(self.s,1)
+        self.initweights(b, self.weightgain)
+        if layeroptions['normalize']:
+            b /= self.s
+        self.b = torch.nn.Parameter(b.reshape(self.s))
+        # Initialize the weights
+        self.W = torch.nn.ParameterList()
+
+        for n in range(1, N + 1):
+            factor_matrix = torch.zeros(self.s, self.rank)
+            self.initweights(factor_matrix, self.weightgain)
+            if layeroptions['normalize']:
+                factor_matrix /= self.s
+            self.W.append(torch.nn.Parameter(factor_matrix))
+
+    def forward(self, z):
+        z = z.clone()
+        Rsums = torch.zeros(self.N, self.s)
+        for n in range(self.N):
+            f = torch.ones(self.rank)
+            for k in range(1, n):
+                res = torch.matmul(z, self.W[k])
+                f = f * res
+            Rsums[n] = torch.matmul(self.W[0], f)
+
+        return Nsum.sum(0) + self.b
+
+
 class PolyclassFTTlayer(PolyLayer):
     def __init__(self, N, rank, imwidth, imheight, layeroptions):
         PolyLayer.__init__(self, N, rank, imwidth*imheight, randnormweights=layeroptions['randnormweights'], parallel=layeroptions['parallel'])
@@ -202,6 +257,45 @@ class PolyclassFTTlayer(PolyLayer):
         # By now the current queue should be empty:
         if not currentQueue.empty():
             raise ValueError
+        return f.reshape(-1)
+
+
+class PolyclassFTTlayer_seq(PolyLayer_seq):
+    def __init__(self, N, rank, imwidth, imheight, layeroptions):
+        PolyLayer_seq.__init__(self, N, rank, imwidth*imheight, randnormweights=layeroptions['randnormweights'], parallel=layeroptions['parallel'])
+
+        self.ranklist = [1, 1]
+        for n in range(self.N - 1):
+            self.ranklist.insert(-1, self.rank)
+        # Start by making the tensor train: store the matrices in one big parameterlist
+        self.TT = torch.nn.ParameterList()
+        for n in range(self.N):
+            # Make tensors of size (r_{k-1}, n_{k} = self.s, r_{k})
+            TTcore = torch.zeros(self.ranklist[n], self.s, self.ranklist[n+1])
+            #self.initweights(TTcore, self.weightgain)
+            torch.nn.init.orthogonal_(TTcore)
+            if layeroptions['normalize']:
+                #TTcore /= sqrt(self.s)
+                TTcore /= torch.norm(TTcore)
+            self.TT.append(torch.nn.Parameter(TTcore))
+
+    def forward(self, z):
+        z = z.clone()
+        b, c, w, h = z.shape
+        # V = torch.empty(self.N, self.rank, self.rank)
+        V = torch.zeros(b, c, self.N, self.rank, self.rank)
+        
+        # for k in range(1, self.N):
+        #     d1, d2 = self.ranklist[k], self.ranklist[k+1]
+        #     V[k,0:d1,0:d2] = torch.matmul(z, self.TT[k].permute(1,0,2).reshape(self.s, d1*d2)).reshape(d1, d2)
+        V[:, :, 0:d1,0:d2] = torch.matmul(z, self.TT[k].permute(1,0,2).reshape(self.s, d1*d2)).reshape(b, c, d1, d2)
+
+
+        f = self.TT[0][0]
+        for k in range(1, self.N):
+            d1, d2 = self.ranklist[k], self.ranklist[k+1]
+            # f = torch.matmul(f, V[k,0:d1,0:d2])
+            f = torch.matmul(f, V[:,:, k,0:d1,0:d2])
         return f.reshape(-1)
 
 
@@ -276,6 +370,48 @@ class Generator(torch.nn.Module):
             self.generatorInParallel()
         else:
             self.generatorInSequence()
+
+        self.x = self.x.reshape(self.batch_size, self.c, self.imwidth, self.imheight)
+        return self.x
+
+
+
+class Generator_seq(torch.nn.Module):
+    def __init__(self, layer, N, rank, imwidth, imheight, scalefactor, layeroptions, generatoroptions):
+        super(Generator_seq, self).__init__()
+        # Channels: here we are working with greyscale images
+        self.c = 1
+        self.imwidth, self.imheight = imwidth, imheight
+        self.s = imwidth*imheight
+        self.PolyLayer = layer(N, rank, imwidth, imheight, layeroptions)
+        self.BN = torch.nn.BatchNorm2d(num_features=1)
+        self.upsample = torch.nn.Upsample(scale_factor=scalefactor, mode='bilinear', align_corners=False)
+
+    def generatorInSequence(self):
+        for batch in range(self.batch_size):
+            self.x[batch, self.c-1] = self.PolyLayer(self.x[batch, self.c-1])
+        return
+
+    def batchesInParallel(self, start, stop, queueindex):
+        # self.c-1 because for one channel we want to access index 0
+        for i in range(start, stop):
+            self.x[i, self.c-1] = self.PolyLayer(self.x[i, self.c-1], queueindex)
+        return
+
+    def forward(self, x):
+        # Register dimensions:
+        xshape = x.shape
+        if len(xshape) == 2:
+            self.batch_size = 1
+        else:
+            self.batch_size = xshape[0]
+
+        # Register x as attribute for parallel access, and clone because dataset would be overwritten
+        self.x = self.BN(x.clone())
+        self.x = self.upsample(self.x)
+        self.x = self.x.reshape(self.batch_size, self.c, self.s)
+
+        self.x = self.PolyLayer(self.x)
 
         self.x = self.x.reshape(self.batch_size, self.c, self.imwidth, self.imheight)
         return self.x
