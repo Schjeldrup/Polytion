@@ -15,6 +15,8 @@ import numpy as np
 import time
 import tqdm
 
+from zipfile import ZipFile
+
 from Polytion import Generator as g
 from Polytion import AutoEncoderNet as AE
 from Polytion import prepData as prep
@@ -179,8 +181,11 @@ if epoch_loss[-1] == np.nan or epoch_loss[-1] == np.inf:
 
 # Save and load the model as a test:
 timestamp = time.strftime("%d-%m-%Y_%H:%M:%S")
-modelname = "Testing/Models/Trained_CP_model_" + timestamp
-modelparamsname = "Testing/Models/Trained_CP_model_params_" + timestamp
+modelname = "Testing/Trained_CP_model"
+if os.path.exists(modelname):
+    modelname += len[os.listdir()]
+modelparamsname = modelname + "_params.pth"
+modelname += ".pth"
 
 modelparams = {"layer":layer, "N":N, "rank":rank, "bottleneck_dim":bottleneck_dim, "LR_dim":LR_dim, "HR_dim":HR_dim, "downscalefactor":downscalefactor, "scalefactor":scalefactor, "layerOptions":layerOptions, "generatorOptions":generatorOptions}
 torch.save(modelparams, modelparamsname)

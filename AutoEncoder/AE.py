@@ -166,10 +166,10 @@ def train(model):
 generatorOptions = {}
 
 layer = g.PolyclassFTTlayer_seq
-layerOptions = {'randnormweights':True, 'normalize':True}
+layerOptions = {'randnormweights':True, 'normalize':False}
 
-layer = g.PolyganCPlayer_seq
-layerOptions = {'randnormweights':True, 'normalize':True}
+# layer = g.PolyganCPlayer_seq
+# layerOptions = {'randnormweights':True, 'normalize':True}
 
 model = AE.Autoencoder_seq(layer, N, rank, bottleneck_dim, HR_dim, downscalefactor, scalefactor, layerOptions, generatorOptions)
 
