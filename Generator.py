@@ -28,7 +28,7 @@ class PolyLayer(torch.nn.Module):
 
 
 class PolyLayer_seq(torch.nn.Module):
-    def __init__(self, N, rank, s, randnormweights=True, parallel=True):
+    def __init__(self, N, rank, s, randnormweights=True):
         # Start inherited structures:
         torch.nn.Module.__init__(self)
         # N = order of the polynomial = order of the tensor A:
@@ -46,7 +46,6 @@ class PolyLayer_seq(torch.nn.Module):
             self.initweights = torch.nn.init.xavier_normal_
         else:
             self.initweights = torch.nn.init.xavier_uniform_
-
 
 
 class PolyganCPlayer(PolyLayer):
@@ -157,7 +156,7 @@ class PolyganCPlayer(PolyLayer):
 
 class PolyganCPlayer_seq(PolyLayer_seq):
     def __init__(self, N, rank, imwidth, imheight, layeroptions):
-        PolyLayer_seq.__init__(self, N, rank, imwidth*imheight, randnormweights=layeroptions['randnormweights'], parallel=layeroptions['parallel'])
+        PolyLayer_seq.__init__(self, N, rank, imwidth*imheight, randnormweights=layeroptions['randnormweights'])
 
         # Initialize the bias
         b = torch.empty(self.s,1)
@@ -175,17 +174,20 @@ class PolyganCPlayer_seq(PolyLayer_seq):
                 factor_matrix /= self.s
             self.W.append(torch.nn.Parameter(factor_matrix))
 
-    def forward(self, z):
+    def forward(self, z, b):
         z = z.clone()
-        Rsums = torch.zeros(self.N, self.s)
+        Rsums = torch.zeros(b, 1, self.s)
         for n in range(self.N):
-            f = torch.ones(self.rank)
-            for k in range(1, n):
+            f = torch.ones(b, 1, self.rank)
+            for k in range(1, n+1):
                 res = torch.matmul(z, self.W[k])
+                # print("res", res.shape)
                 f = f * res
-            Rsums[n] = torch.matmul(self.W[0], f)
-
-        return Nsum.sum(0) + self.b
+            # print("f:", f.shape)
+            # print("W:", self.W[0].shape)
+            # print("mult:", torch.matmul(f, self.W[0].t()).shape)
+            Rsums += torch.matmul(f, self.W[0].t())
+        return Rsums + self.b
 
 
 class PolyclassFTTlayer(PolyLayer):
@@ -262,7 +264,7 @@ class PolyclassFTTlayer(PolyLayer):
 
 class PolyclassFTTlayer_seq(PolyLayer_seq):
     def __init__(self, N, rank, imwidth, imheight, layeroptions):
-        PolyLayer_seq.__init__(self, N, rank, imwidth*imheight, randnormweights=layeroptions['randnormweights'], parallel=layeroptions['parallel'])
+        PolyLayer_seq.__init__(self, N, rank, imwidth*imheight, randnormweights=layeroptions['randnormweights'])
 
         self.ranklist = [1, 1]
         for n in range(self.N - 1):
@@ -279,22 +281,19 @@ class PolyclassFTTlayer_seq(PolyLayer_seq):
                 TTcore /= torch.norm(TTcore)
             self.TT.append(torch.nn.Parameter(TTcore))
 
-    def forward(self, z):
+    def forward(self, z, b):
         z = z.clone()
-        b, c, w, h = z.shape
-        # V = torch.empty(self.N, self.rank, self.rank)
-        V = torch.zeros(b, c, self.N, self.rank, self.rank)
+        V = torch.zeros(b, 1, self.N, self.rank, self.rank)
         
-        # for k in range(1, self.N):
-        #     d1, d2 = self.ranklist[k], self.ranklist[k+1]
-        #     V[k,0:d1,0:d2] = torch.matmul(z, self.TT[k].permute(1,0,2).reshape(self.s, d1*d2)).reshape(d1, d2)
-        V[:, :, 0:d1,0:d2] = torch.matmul(z, self.TT[k].permute(1,0,2).reshape(self.s, d1*d2)).reshape(b, c, d1, d2)
-
+        for k in range(1, self.N):
+            d1, d2 = self.ranklist[k], self.ranklist[k+1]
+            # print(self.TT[k].shape)
+            # print(self.TT[k].permute(1,0,2).reshape(self.s, d1*d2).shape)
+            V[:,:,k,0:d1,0:d2] = torch.matmul(z, self.TT[k].permute(1,0,2).reshape(self.s, d1*d2)).reshape(b, 1, d1, d2)
 
         f = self.TT[0][0]
         for k in range(1, self.N):
             d1, d2 = self.ranklist[k], self.ranklist[k+1]
-            # f = torch.matmul(f, V[k,0:d1,0:d2])
             f = torch.matmul(f, V[:,:, k,0:d1,0:d2])
         return f.reshape(-1)
 
@@ -387,17 +386,6 @@ class Generator_seq(torch.nn.Module):
         self.BN = torch.nn.BatchNorm2d(num_features=1)
         self.upsample = torch.nn.Upsample(scale_factor=scalefactor, mode='bilinear', align_corners=False)
 
-    def generatorInSequence(self):
-        for batch in range(self.batch_size):
-            self.x[batch, self.c-1] = self.PolyLayer(self.x[batch, self.c-1])
-        return
-
-    def batchesInParallel(self, start, stop, queueindex):
-        # self.c-1 because for one channel we want to access index 0
-        for i in range(start, stop):
-            self.x[i, self.c-1] = self.PolyLayer(self.x[i, self.c-1], queueindex)
-        return
-
     def forward(self, x):
         # Register dimensions:
         xshape = x.shape
@@ -410,8 +398,7 @@ class Generator_seq(torch.nn.Module):
         self.x = self.BN(x.clone())
         self.x = self.upsample(self.x)
         self.x = self.x.reshape(self.batch_size, self.c, self.s)
-
-        self.x = self.PolyLayer(self.x)
+        self.x = self.PolyLayer(self.x, self.batch_size)
 
         self.x = self.x.reshape(self.batch_size, self.c, self.imwidth, self.imheight)
         return self.x
