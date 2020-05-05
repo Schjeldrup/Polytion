@@ -10,9 +10,9 @@ from Polytion import AutoEncoderNet as AE
 import matplotlib.pyplot as plt
 
 # Get the required images: (change for real testfolder later!!)
-imagefolderpath = '000001_01_01'
-LRpath = imagefolderpath + '/LRimages.pickle'
-HRpath = imagefolderpath + '/HRimages.pickle'
+imagefolderpath = 'Testing'
+LRpath = imagefolderpath + '/test_LRimages.pickle'
+HRpath = imagefolderpath + '/test_HRimages.pickle'
 try:
     with open(LRpath, 'rb') as handle:
         LRimages = pickle.load(handle)
@@ -22,7 +22,7 @@ except ImportError:
     print("Image files don't exist")
 
 # Load the model and parameters:
-modeltime = "04-05-2020_10:05:13"
+modeltime = "04-05-2020_10:05:15"
 modelname = "Testing/Trained_CP_model.pth"
 modelparamsname = "Testing/Trained_CP_model_params.pth"
 
@@ -31,7 +31,7 @@ model = AE.Autoencoder_seq(mp["layer"], mp["N"], mp["rank"], mp["bottleneck_dim"
 model.load_state_dict(torch.load(modelname))
 
 # Test:
-index = 1
+index = 4
 model.eval()
 test = torch.tensor(LRimages[index]).reshape(1,1,mp["LR_dim"],mp["LR_dim"])
 output = model(test).reshape(mp["HR_dim"], mp["HR_dim"]).detach().numpy()
