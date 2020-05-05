@@ -6,12 +6,52 @@ from math import log10, exp, sqrt
 from skimage.metrics import structural_similarity
 
 # See https://mkfmiku.github.io/loss-functions-in-image-enhancement/
+# See also Remi Flamary for how to use L2 and TV together
+class TVLoss(torch.nn.Module):
+    def __init__(self, tvloss_weight=1e-5):
+        super(TVLoss, self).__init__()
+        self.tvloss_weight = tvloss_weight
+
+    def forward(self, image):
+        b, c, h, w = image.size()
+        h_tv = torch.pow((image[:, :, 1:, :] - image[:, :, :(h - 1), :]), 2).sum()
+        w_tv = torch.pow((image[:, :, :, 1:] - image[:, :, :, :(w - 1)]), 2).sum()
+        return self.tvloss_weight * torch.sqrt(h_tv + w_tv)
+
+
+# Orthogonal loss: enforce orthogonal matrices in the weights
+class OrthLoss(torch.nn.Module):
+    def __init__(self, orthloss_weight=1e-5):
+        super(OrthLoss, self).__init__()
+        self.orthloss_weight = orthloss_weight
+
+    def forward(self, model, device):
+        loss = torch.tensor(0., dtype=torch.float32, device=device)
+        for name, param in model.named_parameters():
+            if 'TT' in name and param.requires_grad:
+                r1, s, r2 = param.shape
+                r = r1 if r1 > r2 else r2
+                #param, _ = torch.qr(param, some=False)
+                #print(param.shape)
+                #nodiag = torch.ones(r, s, s, dtype=torch.float32) - torch.eye(s, dtype=torch.float32)
+                # print(param.permute(0, 2, 1).shape)
+                # print(param.permute(0, 1, 2).shape)
+                #print(torch.bmm(param.permute(0, 2, 1), param.permute(0, 1, 2)).shape)
+                # weight_squared = torch.bmm(param.permute(0, 1, 2), param.permute(0, 2, 1))
+                weight_squared = torch.bmm(param.permute(0, 2, 1), param.permute(0, 1, 2))
+                weight_squared[:, range(r2), range(r2)] -= 1
+                loss += torch.sqrt((weight_squared ** 2)).sum()
+        return self.orthloss_weight * loss
+
+
+# See https://mkfmiku.github.io/loss-functions-in-image-enhancement/
 class PSNRLoss(torch.nn.Module):
     def __init__(self):
         super(PSNRLoss, self).__init__()
-    def forward(self, img1, img2):
-        mse = torch.mean((img1 - img2) ** 2)
-        return 20 * torch.log10( 1.0 / torch.sqrt(mse))
+    def forward(self, img1):
+        mse = torch.mean((img1) ** 2)
+        out = 20 * torch.log10( 1.0 / torch.sqrt(mse))
+        return out.float()
 
 # See https://scikit-image.org/docs/dev/auto_examples/transform/plot_ssim.html
 class SkiMageSSIMLoss(torch.nn.Module):
@@ -79,21 +119,4 @@ class SSIMLoss(torch.nn.Module):
             self.window = window
             self.channel = channel
         return self.ssim(img1, img2, window, self.window_size, channel, self.size_average)
-
-
-# See https://mkfmiku.github.io/loss-functions-in-image-enhancement/
-# See also Remi Flamary for how to use L2 and TV together
-class TVLoss(torch.nn.Module):
-    def __init__(self, tvloss_weight=1e-5):
-        super(TVLoss, self).__init__()
-        self.tvloss_weight = tvloss_weight
-
-    def forward(self, image):
-        b, c, h, w = image.size()
-        h_tv = torch.pow((image[:, :, 1:, :] - image[:, :, :(h - 1), :]), 2).sum()
-        w_tv = torch.pow((image[:, :, :, 1:] - image[:, :, :, :(w - 1)]), 2).sum()
-        return self.tvloss_weight * torch.sqrt(h_tv + w_tv)
-
-
-
 

@@ -162,16 +162,15 @@ class PolyganCPlayer_seq(PolyLayer_seq):
         b = torch.empty(self.s,1)
         self.initweights(b, self.weightgain)
         if layeroptions['normalize']:
-            b /= self.s
+            b /= sqrt(self.s)
         self.b = torch.nn.Parameter(b.reshape(self.s))
         # Initialize the weights
         self.W = torch.nn.ParameterList()
-
-        for n in range(1, N + 1):
+        for n in range(N+1):
             factor_matrix = torch.zeros(self.s, self.rank)
             self.initweights(factor_matrix, self.weightgain)
             if layeroptions['normalize']:
-                factor_matrix /= self.s
+                factor_matrix /= sqrt(self.s)
             self.W.append(torch.nn.Parameter(factor_matrix))
 
     def forward(self, z, b):
@@ -179,13 +178,10 @@ class PolyganCPlayer_seq(PolyLayer_seq):
         Rsums = torch.zeros(b, 1, self.s)
         for n in range(self.N):
             f = torch.ones(b, 1, self.rank)
-            for k in range(1, n+1):
-                res = torch.matmul(z, self.W[k])
+            for k in range(n+1):
+                res = torch.matmul(z, self.W[k+1])
                 # print("res", res.shape)
                 f = f * res
-            # print("f:", f.shape)
-            # print("W:", self.W[0].shape)
-            # print("mult:", torch.matmul(f, self.W[0].t()).shape)
             Rsums += torch.matmul(f, self.W[0].t())
         return Rsums + self.b
 
@@ -274,11 +270,11 @@ class PolyclassFTTlayer_seq(PolyLayer_seq):
         for n in range(self.N):
             # Make tensors of size (r_{k-1}, n_{k} = self.s, r_{k})
             TTcore = torch.zeros(self.ranklist[n], self.s, self.ranklist[n+1])
-            #self.initweights(TTcore, self.weightgain)
-            torch.nn.init.orthogonal_(TTcore)
+            self.initweights(TTcore, self.weightgain)
+            #torch.nn.init.orthogonal_(TTcore, 0.8)
             if layeroptions['normalize']:
-                #TTcore /= sqrt(self.s)
-                TTcore /= torch.norm(TTcore)
+                TTcore /= sqrt(sqrt(self.s))
+                #TTcore /= torch.norm(TTcore)
             self.TT.append(torch.nn.Parameter(TTcore))
 
     def forward(self, z, b):
@@ -395,7 +391,8 @@ class Generator_seq(torch.nn.Module):
             self.batch_size = xshape[0]
 
         # Register x as attribute for parallel access, and clone because dataset would be overwritten
-        self.x = self.BN(x.clone())
+        #self.x = self.BN(x.clone())
+        self.x = x.clone()
         self.x = self.upsample(self.x)
         self.x = self.x.reshape(self.batch_size, self.c, self.s)
         self.x = self.PolyLayer(self.x, self.batch_size)

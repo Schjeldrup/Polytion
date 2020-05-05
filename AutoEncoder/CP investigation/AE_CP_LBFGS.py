@@ -24,7 +24,6 @@ from Polytion import LossFunctions as lf
 
 cuda = torch.cuda.is_available()
 if cuda:
-    #torch.cuda.init()
     print("cuda session enabled")
     device = torch.device("cuda:0")
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
@@ -34,13 +33,13 @@ else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
 # Parameters:
-batch_size = 15
+batch_size = 100
 N = 4
-rank = 8
+rank = 11
 
 LR_dim = 128
 HR_dim = 512
-bottleneck_dim = 32
+bottleneck_dim = 16
 
 scalefactor = HR_dim/bottleneck_dim
 downscalefactor = bottleneck_dim/LR_dim
@@ -64,9 +63,10 @@ else:
     with open(LRpath, 'wb') as handle:
         pickle.dump(LRimages, handle)#, protocol=pickle.HIGHEST_PROTOCOL)
 
-# images=prep.load_images_from_folder('/work3/projects/s181603-Jun-2020/Images_png.old/000020_03_01/')
-# HRimages = prep.normalize_0(images)
-# LRimages = prep.compress_images(HRimages)
+#images=prep.load_images_from_folder('/work3/projects/s181603-Jun-2020/Images_png.old/000020_03_01/')
+images=prep.load_images_from_all_folders('/work3/projects/s181603-Jun-2020/Images_png', 500)
+HRimages = prep.normalize_0(images)
+LRimages = prep.compress_images(HRimages)
 
 HR_loader = torch.utils.data.DataLoader(HRimages,batch_size=batch_size)#, pin_memory=cuda)
 LR_loader = torch.utils.data.DataLoader(LRimages, batch_size=batch_size)#, pin_memory=cuda)
@@ -80,26 +80,22 @@ LR_loader = torch.utils.data.DataLoader(LRimages, batch_size=batch_size)#, pin_m
 
 # layer = g.PolyclassFTTlayer_seq
 # #layer = g.PolyganCPlayer_seq
-# model = AE.Autoencoder_seq(layer, N, rank, bottleneck_dim, HR_dim, downscalefactor, scalefactor, layerOptions, generatorOptions)
+# model = Autoencoder_seq(layer, layerOptions, generatorOptions)
 
 # for LoResIm in LR_loader:
 #     LoResIm = LoResIm.unsqueeze_(1).float()
 #     LoResIm = torch.autograd.Variable(LoResIm).to(device)
+#     print("LoResIm = ", LoResIm.shape)
 #     output = model(LoResIm).float()
-#     lf.OrthLoss(1.e-3)(model, device).float()
 #     break
 
 # print("Succes")
 # sys.exit()
 #####
 
-#lossfunc = torch.nn.SmoothL1Loss()
-#lossfunc = torch.nn.L1Loss()
+lossfunc = torch.nn.SmoothL1Loss()
 lossfunc = torch.nn.MSELoss()
-TV_weight = 0
-TVlossfunc = lf.TVLoss(TV_weight)
-Orth_weight = 10
-orthlossfunc = lf.OrthLoss(Orth_weight)
+TV_weight = 0#1.e-4
 
 def train(model):
     model.train()
@@ -108,45 +104,59 @@ def train(model):
 
     epoch_loss = []
     all_loss = []
-    optimizer_name = torch.optim.Adam
-    lr = 0.1
+    optimizer_name = torch.optim.LBFGS
+    lr = 0.005
     w_decay = 0
-    optimizer = optimizer_name(model.parameters(), lr=lr, weight_decay=w_decay)
-    gamma = 0.93
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma, last_epoch=-1)
+    optimizer = optimizer_name(model.parameters(), lr=lr)
+    gamma = 0.9
+    #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma, last_epoch=-1)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, gamma, last_epoch=-1)
     # Make info for suptitile
     info = str(layer)[27:-2] + ": " + str(optimizer_name)[25:-2] + " with " + str(scheduler)[26:-26]
     info += ", lr_init = " + str(lr) + ", w_decay = " + str(w_decay) +", gamma = " + str(gamma)
 
-    num_epochs = 100
+    num_epochs = 50
     start = time.time()
     epochs = tqdm.trange(num_epochs, desc="Start training", leave=True)
     try:
         for epoch in epochs:
             batch_loss = []
-            for HiResIm, LoResIm in zip(HR_loader, LR_loader):
+            
+            for HiResIm, LoResIm in zip(HR_loader, LR_loader):   
                 HiResIm = HiResIm.unsqueeze_(1).float()
                 b, c, h, w = HiResIm.size()
                 LoResIm = LoResIm.unsqueeze_(1).float()
                 HiResIm = torch.autograd.Variable(HiResIm).to(device)
                 LoResIm = torch.autograd.Variable(LoResIm).to(device)
 
-                output = model(LoResIm).float()
-                loss = lossfunc(output, HiResIm).float() # + orthlossfunc(model, device).float() #+ TVlossfunc(output).float()
-                loss /= (b*c*w*h)
+                def closure():
+                    optimizer.zero_grad()
+                    out = model(LoResIm).float()
+                    loss = lossfunc(out, HiResIm).float()
+                    #loss /= (b*c*w*h)
+                    loss.backward()
+                    lossvalue = loss.item()
+                    all_loss.append(lossvalue)
+                    batch_loss.append(lossvalue)
+                    
+                    epochs.set_description("lr = {:.1e}, loss = {:.5e}".format(scheduler.get_lr()[0], lossvalue))
+                    epochs.refresh()
+                    #scheduler.step()
+                    if torch.isnan(loss).sum() > 0:
+                        raise ValueError
+                    return  loss
 
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                lossvalue = loss.item()
-                all_loss.append(lossvalue)
-                batch_loss.append(lossvalue)
-                if torch.isnan(loss).sum() > 0:
-                    raise ValueError
+                optimizer.step(closure)
+                # output = model(LoResIm).float()
+                # loss = lossfunc(output, HiResIm).float() + lf.TVLoss(TV_weight)(output).float()
+                # loss /= (b*c*w*h)
+                # loss /= w*h
 
-                epochs.set_description("lr = {:.1e}, loss = {:.5e}".format(scheduler.get_lr()[0], orthlossfunc(model, device)))
-                epochs.refresh()
-                scheduler.step()
+                # optimizer.zero_grad()
+                # loss.backward()
+                # optimizer.step()
+            
+                
 
             epoch_loss.append(np.mean(batch_loss))
         print("Training finished, took ", round(time.time() - start,2), "s to complete")
@@ -169,20 +179,24 @@ def train(model):
 
 generatorOptions = {}
 
-layer = g.PolyclassFTTlayer_seq
-generatorOptions = {'parallel':True, 'workers':2}
-layerOptions = {'randnormweights':True, 'normalize':False, 'parallel':True}
-
-# layer = g.PolyganCPlayer_seq
+# layer = g.PolyclassFTTlayer_seq
 # layerOptions = {'randnormweights':True, 'normalize':True}
+
+layer = g.PolyganCPlayer_seq
+layerOptions = {'randnormweights':False, 'normalize':False}
 
 model = AE.Autoencoder_seq(layer, N, rank, bottleneck_dim, HR_dim, downscalefactor, scalefactor, layerOptions, generatorOptions)
 
 epoch_loss, info = train(model)
 
+if epoch_loss[-1] == np.nan or epoch_loss[-1] == np.inf:
+    print("Error: Inf or Nan found")
+    sys.exit()
+
 timestamp = time.strftime("%d-%m-%Y_%H:%M:%S")
 
 # Save and load the model as a test:
+# timestamp = time.strftime("%d-%m-%Y_%H:%M:%S")
 # modelname = "Testing/Trained_CP_model"
 # if os.path.exists(modelname):
 #     modelname += len[os.listdir()]
@@ -209,7 +223,7 @@ ax[0].set_title(lossfuncname + "loss")
 ax[0].set_xlabel('epochs')
 
 index = 1
-ax[1].imshow(LRimages[index], cmap='gray')
+ax[1].imshow(HRimages[index], cmap='gray')
 ax[1].set_title("Input")
 ax[1].axis('off')
 
@@ -221,11 +235,11 @@ else:
     output = model(test).reshape(HR_dim,HR_dim).detach().numpy()
 
 ax[2].imshow(output, cmap='gray')
-ax[2].set_title("Output: diff = " + str((output - HRimages[index]).sum()))
+ax[2].set_title("Output")
 ax[2].axis('off')
 
-ax[3].imshow(HRimages[index], cmap='gray')
-ax[3].set_title("Truth")
+ax[3].imshow(HRimages[0], cmap='gray')
+ax[3].set_title("First image in batch")
 ax[3].axis('off')
 
 filename = "AutoEncoder/" + str(lossfunc)[0:-2] + timestamp + ".png"
