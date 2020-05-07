@@ -22,3 +22,13 @@ class Autoencoder_seq(torch.nn.Module):
         x = self.encoder(x.float())
         x = self.decoder(x)
         return x
+
+
+class NotAnAutoencoder(torch.nn.Module):
+    def __init__(self, layer, N, rank, HR_dim, scalefactor, layerOptions, generatorOptions):
+        super(NotAnAutoencoder,self).__init__()
+        self.decoder = g.Generator_seq(layer, N, rank, HR_dim, HR_dim, scalefactor, layerOptions, generatorOptions)
+
+    def forward(self, x):
+        x = self.decoder(x.float())
+        return x
