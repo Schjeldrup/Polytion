@@ -48,9 +48,9 @@ class OrthLoss(torch.nn.Module):
 class PSNRLoss(torch.nn.Module):
     def __init__(self):
         super(PSNRLoss, self).__init__()
-    def forward(self, img1):
-        mse = torch.mean((img1) ** 2)
-        out = 20 * torch.log10( 1.0 / torch.sqrt(mse))
+    def forward(self, img1, img2):
+        mse = torch.mean((img1 -img2) ** 2) + 1.0e-7
+        out = 10 * torch.log10( (torch.max(img1) - torch.min(img1))**2 / torch.sqrt(mse))
         return out.float()
 
 # See https://scikit-image.org/docs/dev/auto_examples/transform/plot_ssim.html

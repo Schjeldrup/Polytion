@@ -33,13 +33,13 @@ else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
 # Parameters:
-batch_size = 100
+batch_size = 32
 N = 8
 rank = 11
 
 LR_dim = 128
 HR_dim = 512
-bottleneck_dim = 16
+bottleneck_dim = 64
 
 scalefactor = HR_dim/bottleneck_dim
 downscalefactor = bottleneck_dim/LR_dim
@@ -64,9 +64,9 @@ else:
         pickle.dump(LRimages, handle)#, protocol=pickle.HIGHEST_PROTOCOL)
 
 #images=prep.load_images_from_folder('/work3/projects/s181603-Jun-2020/Images_png.old/000020_03_01/')
-images=prep.load_images_from_all_folders('/work3/projects/s181603-Jun-2020/Images_png', 100)
-HRimages = prep.normalize_0(images)
-LRimages = prep.compress_images(HRimages)
+# images=prep.load_images_from_all_folders('/work3/projects/s181603-Jun-2020/Images_png', 100)
+# HRimages = prep.normalize_0(images)
+# LRimages = prep.compress_images(HRimages)
 
 HR_loader = torch.utils.data.DataLoader(HRimages, shuffle = True, batch_size=batch_size)#, pin_memory=cuda)
 LR_loader = torch.utils.data.DataLoader(LRimages, shuffle = True, batch_size=batch_size)#, pin_memory=cuda)

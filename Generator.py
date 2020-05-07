@@ -170,7 +170,7 @@ class PolyganCPlayer_seq(PolyLayer_seq):
             factor_matrix = torch.zeros(self.s, self.rank)
             self.initweights(factor_matrix, self.weightgain)
             if layeroptions['normalize']:
-                factor_matrix /= sqrt(self.s)
+                factor_matrix /= sqrt(sqrt(self.s))
             self.W.append(torch.nn.Parameter(factor_matrix))
 
     def forward(self, z, b):
@@ -180,7 +180,6 @@ class PolyganCPlayer_seq(PolyLayer_seq):
             f = torch.ones(b, 1, self.rank)
             for k in range(n+1):
                 res = torch.matmul(z, self.W[k+1])
-                # print("res", res.shape)
                 f = f * res
             Rsums += torch.matmul(f, self.W[0].t())
         return Rsums + self.b
