@@ -34,8 +34,13 @@ else:
 
 # Parameters:
 batch_size = 16
+<<<<<<< HEAD
+N = 1
+rank = 50
+=======
 N = 5
 rank = 11
+>>>>>>> fa473ae26e092a0bb800906fcbadee251f04b31d
 
 LR_dim = 128
 HR_dim = 512
@@ -64,12 +69,21 @@ else:
         pickle.dump(LRimages, handle)#, protocol=pickle.HIGHEST_PROTOCOL)
 
 #images=prep.load_images_from_folder('/work3/projects/s181603-Jun-2020/Images_png.old/000020_03_01/')
+<<<<<<< HEAD
+images=prep.load_images_from_all_folders('/work3/projects/s181603-Jun-2020/Images_png', 50)
+HRimages = prep.normalize_0(images)
+LRimages = prep.compress_images(HRimages)
+
+HR_loader = torch.utils.data.DataLoader(HRimages, shuffle=False, batch_size=batch_size)#, pin_memory=cuda)
+LR_loader = torch.utils.data.DataLoader(LRimages, shuffle=False, batch_size=batch_size)#, pin_memory=cuda)
+=======
 # images=prep.load_images_from_all_folders('/work3/projects/s181603-Jun-2020/Images_png', 50)
 # HRimages = prep.normalize_0(images)
 # LRimages = prep.compress_images(HRimages)
 
 HR_loader = torch.utils.data.DataLoader(HRimages, batch_size=batch_size)#, pin_memory=cuda)
 LR_loader = torch.utils.data.DataLoader(LRimages, batch_size=batch_size)#, pin_memory=cuda)
+>>>>>>> fa473ae26e092a0bb800906fcbadee251f04b31d
 
 #HR_loader = torch.utils.data.DataLoader(HRimages[:20],batch_size=batch_size) #pin_memory=cuda)
 #LR_loader = torch.utils.data.DataLoader(LRimages[:20], batch_size=batch_size) #pin_memory=cuda)
@@ -105,12 +119,21 @@ def train(model):
     epoch_loss = []
     all_loss = []
     optimizer_name = torch.optim.Adam
+<<<<<<< HEAD
+    lr = 0.001
+    w_decay = 0#1.0e-4
+    optimizer = optimizer_name(model.parameters(), lr=lr, weight_decay=w_decay)
+    gamma = 0.99
+    #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma, last_epoch=-1)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, gamma, last_epoch=-1)
+=======
     lr = 0.1
     w_decay = 0#1.0e-4
     optimizer = optimizer_name(model.parameters(), lr=lr, weight_decay=w_decay)
     gamma = 0.9
     #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma, last_epoch=-1)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 10, gamma, last_epoch=-1)
+>>>>>>> fa473ae26e092a0bb800906fcbadee251f04b31d
     # Make info for suptitile
     info = str(layer)[27:-2] + ": " + str(optimizer_name)[25:-2] + " with " + str(scheduler)[26:-26]
     info += ", lr_init = " + str(lr) + ", w_decay = " + str(w_decay) +", gamma = " + str(gamma)
@@ -118,7 +141,11 @@ def train(model):
     psnrfunc = lf.PSNRLoss()
     epoch_psnr = []
     
+<<<<<<< HEAD
+    num_epochs = 500
+=======
     num_epochs = 100
+>>>>>>> fa473ae26e092a0bb800906fcbadee251f04b31d
     start = time.time()
     epochs = tqdm.trange(num_epochs, desc="Start training", leave=True)
     try:
@@ -140,17 +167,31 @@ def train(model):
                 #     lmax = torch.max(normalize_me[normindex]).float()
                 #     output[normindex] = (normalize_me[normindex] - lmin)/(lmax-lmin)
 
+<<<<<<< HEAD
+                current_psnr = psnr(HiResIm.cpu().detach().numpy(), output.cpu().detach().numpy())
+                #current_psnr = 0.0#psnrfunc(HiResIm, output)
+=======
                 #current_psnr = psnrfunc(HiResIm.cpu().detach().numpy(), output.cpu().detach().numpy())
                 current_psnr = 0.0#psnrfunc(HiResIm, output)
+>>>>>>> fa473ae26e092a0bb800906fcbadee251f04b31d
                 batch_psnr.append(current_psnr)
 
                 loss = lossfunc(output, HiResIm).float() + lf.TVLoss(TV_weight)(output).float()
                 # loss /= (b*c*w*h)
                 # loss /= w*h
+<<<<<<< HEAD
+
+                a = list(model.parameters())[1].clone()
+=======
+>>>>>>> fa473ae26e092a0bb800906fcbadee251f04b31d
 
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+
+                b = list(model.parameters())[1].clone()
+                #print(torch.equal(a.data,b.data))
+
                 lossvalue = loss.item()
                 all_loss.append(lossvalue)
                 batch_loss.append(lossvalue)
@@ -158,7 +199,11 @@ def train(model):
                     print("nans in the loss function")
                     raise ValueError
 
+<<<<<<< HEAD
+                epochs.set_description("lr = {:.1e}, loss = {:.5e}, psnr = {:.2}".format(scheduler.get_lr()[0], np.mean(batch_loss), current_psnr))
+=======
                 epochs.set_description("lr = {:.1e}, loss = {:.5e}, psnr = {:.4}".format(scheduler.get_lr()[0], lossvalue, current_psnr))
+>>>>>>> fa473ae26e092a0bb800906fcbadee251f04b31d
                 epochs.refresh()
                 scheduler.step()
 
@@ -169,10 +214,17 @@ def train(model):
         print("\nscript execution halted ..")
         #print("loss = ", all_loss)
         sys.exit()
+<<<<<<< HEAD
+    except ValueError:
+        print("\nnan found ..")
+        #print("loss = ", all_loss)
+        sys.exit()
+=======
     # except ValueError:
     #     print("\nnan found ..")
     #     #print("loss = ", all_loss)
     #     sys.exit()
+>>>>>>> fa473ae26e092a0bb800906fcbadee251f04b31d
     return epoch_loss, epoch_psnr, info
 
 
@@ -184,17 +236,30 @@ def train(model):
 
 generatorOptions = {}
 
+<<<<<<< HEAD
+# layer = g.PolyclassFTTlayer_seq
+# layerOptions = {'randnormweights':True, 'normalize':True}
+=======
 layer = g.PolyclassFTTlayer_seq
 layerOptions = {'randnormweights':False, 'normalize':True}
 
 # layer = g.PolyganCPlayer_seq
 # layerOptions = {'randnormweights':False, 'normalize':False}
+>>>>>>> fa473ae26e092a0bb800906fcbadee251f04b31d
+
+layer = g.PolyganCPlayer_seq
+layerOptions = {'randnormweights':False, 'normalize':False}
 
 model = AE.Autoencoder_seq(layer, N, rank, bottleneck_dim, HR_dim, downscalefactor, scalefactor, layerOptions, generatorOptions)
 # model = g.Generator_seq(layer, N, rank, HR_dim, HR_dim, 4, layerOptions, generatorOptions)
 
 epoch_loss, epoch_psnr, info = train(model)
 
+<<<<<<< HEAD
+epoch_loss, epoch_psnr, info = train(model)
+
+=======
+>>>>>>> fa473ae26e092a0bb800906fcbadee251f04b31d
 if epoch_loss[-1] == np.nan or epoch_loss[-1] == np.inf:
     print("Error: Inf or Nan found")
     sys.exit()
@@ -219,7 +284,7 @@ timestamp = time.strftime("%d-%m-%Y_%H:%M:%S")
 # model.load_state_dict(torch.load(modelname))
 # print("Loaded model and params")
 
-fig, ax = plt.subplots(1,4, figsize=(20,5))
+fig, ax = plt.subplots(1,5, figsize=(25,5))
 fig.suptitle(info, fontsize=10)
 second_ax = ax[0].twinx()
 ax[0].plot(epoch_loss, c='b')
@@ -244,13 +309,31 @@ if cuda:
 else:
     output = model(test).reshape(HR_dim,HR_dim).detach().numpy()
 
+<<<<<<< HEAD
+average = torch.zeros(HR_dim, HR_dim)
+for HiResIm, LoResIm in zip(HR_loader, LR_loader):  
+    average += HiResIm.mean(0)
+
+
+ax[2].imshow(average.cpu().detach().numpy(), cmap='gray')
+ax[2].set_title("Average")
+ax[2].axis('off')
+
+ax[3].imshow(output, cmap='gray')
+ax[3].set_title("Output")
+=======
 ax[2].imshow(output, cmap='gray')
 ax[2].set_title("Output")
 ax[2].axis('off')
 
 ax[3].imshow(HRimages[0], cmap='gray')
 ax[3].set_title("First image in batch")
+>>>>>>> fa473ae26e092a0bb800906fcbadee251f04b31d
 ax[3].axis('off')
+
+ax[4].imshow(HRimages[0], cmap='gray')
+ax[4].set_title("First image in batch")
+ax[4].axis('off')
 
 filename = "AutoEncoder/" + str(lossfunc)[0:-2] + timestamp + ".png"
 fig.savefig(filename, bbox_inches='tight')

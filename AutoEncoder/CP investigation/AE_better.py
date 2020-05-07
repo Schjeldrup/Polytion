@@ -68,8 +68,8 @@ else:
 # HRimages = prep.normalize_0(images)
 # LRimages = prep.compress_images(HRimages)
 
-HR_loader = torch.utils.data.DataLoader(HRimages, shuffle = True, batch_size=batch_size)#, pin_memory=cuda)
-LR_loader = torch.utils.data.DataLoader(LRimages, shuffle = True, batch_size=batch_size)#, pin_memory=cuda)
+HR_loader = torch.utils.data.DataLoader(HRimages, shuffle = False, batch_size=batch_size)#, pin_memory=cuda)
+LR_loader = torch.utils.data.DataLoader(LRimages, shuffle = False, batch_size=batch_size)#, pin_memory=cuda)
 
 #HR_loader = torch.utils.data.DataLoader(HRimages[:20],batch_size=batch_size) #pin_memory=cuda)
 #LR_loader = torch.utils.data.DataLoader(LRimages[:20], batch_size=batch_size) #pin_memory=cuda)
@@ -108,7 +108,7 @@ def train(model):
     lr = 0.001
     w_decay = 0#1.0e-4
     optimizer = optimizer_name(model.parameters(), lr=lr, weight_decay=w_decay)
-    gamma = 0.95
+    gamma = 0.9
     #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma, last_epoch=-1)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, gamma, last_epoch=-1)
     # Make info for suptitile
