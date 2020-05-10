@@ -3,6 +3,7 @@ import threading
 import queue
 
 from math import sqrt
+from math import factorial 
 
 class PolyLayer(torch.nn.Module):
     def __init__(self, N, rank, s, randnormweights=True, parallel=True):
@@ -177,11 +178,12 @@ class PolyganCPlayer_seq(PolyLayer_seq):
         z = z.clone()
         Rsums = torch.zeros(b, 1, self.s)
         for n in range(self.N):
+            o = n+1
             f = torch.ones(b, 1, self.rank)
             for k in range(n+1):
                 res = torch.matmul(z, self.W[k+1])
                 f = f * res
-            Rsums += torch.matmul(f, self.W[0].t())
+            Rsums += torch.matmul(f, self.W[0].t()) /factorial(o)
         return Rsums + self.b
 
 
