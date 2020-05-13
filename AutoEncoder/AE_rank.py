@@ -10,7 +10,9 @@ import pickle
 import torch
 import torchvision
 
+import matplotlib
 import matplotlib.pyplot as plt
+
 import numpy as np
 import time
 import tqdm
@@ -24,16 +26,16 @@ from Polytion import LossFunctions as lf
 
 cuda = torch.cuda.is_available()
 if cuda:
-    print("cuda session enabled")
-    device = torch.device("cuda")
+    print("cuda session enabled ..")
+    device = torch.device("cuda:0")
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
 else:
-    print("gpu session enabled")
+    print("gpu session enabled ..")
     device = torch.device("cpu")
     torch.set_default_tensor_type('torch.FloatTensor')
 
 # Parameters:
-batch_size = 8
+batch_size = 32
 N = 1
 rank = 50
 
@@ -78,13 +80,11 @@ HR_loader = torch.utils.data.DataLoader(train_HRimages, shuffle=False, batch_siz
 LR_loader = torch.utils.data.DataLoader(train_LRimages, shuffle=False, batch_size=batch_size)#, pin_memory=cuda)
 
 lossfunc = torch.nn.SmoothL1Loss()
-lossfunc = torch.nn.MSELoss()
-TV_weight = 1.e-4
-SL_weight = 0#.e-5
+#lossfunc = torch.nn.MSELoss()
+TV_weight = 5.e-5
+styleloss = lf.StyleLoss(1.0e-12)
 
 num_epochs = 100
-tvloss = lf.TVLoss(TV_weight)
-styleloss = lf.StyleLoss(SL_weight)
 
 def train(model):
     model.train()
@@ -95,16 +95,15 @@ def train(model):
     all_loss = []
     optimizer_name = torch.optim.Adam
     lr = 0.0005
-    w_decay = 1.0e-5
+    w_decay = 0#1.0e-5
     optimizer = optimizer_name(model.parameters(), lr=lr, weight_decay=w_decay)
-    gamma = 0.98
+    gamma = 0.99
     #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma, last_epoch=-1)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 2, gamma, last_epoch=-1)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, gamma, last_epoch=-1)
     # Make info for suptitile
     info = str(layer)[27:-2] + ": N = " + str(N) +", r = " + str(rank) + ". " + str(optimizer_name)[25:-2] + " with " + str(scheduler)[26:-26]
     info += ", lr_init = " + str(lr) + ", w_decay = " + str(w_decay) +", gamma = " + str(gamma)
-    info += ", TV = " + str(TV_weight) + ", Style = " + str(SL_weight)
-
+    
     start = time.time()
     epochs = tqdm.trange(num_epochs, desc="Start training", leave=True)
     try:
@@ -118,7 +117,7 @@ def train(model):
                 LoResIm = torch.autograd.Variable(LoResIm).to(device)
 
                 output = model(LoResIm).float()
-                loss = lossfunc(output, HiResIm).float() #+ styleloss(output.squeeze(1), HiResIm.squeeze(1)).float() + tvloss(output).float()
+                loss = lossfunc(output, HiResIm).float() #+ styleloss(output.squeeze(1), HiResIm.squeeze(1)).float() #+ lf.TVLoss(TV_weight)(output).float()
                 # loss /= (b*c*w*h)
                 # loss /= w*h
 
@@ -168,90 +167,53 @@ def testTheseImages(images, model):
         return output[0]
     return output
 
+
 # ## 3. Training the different layers and generators:
 generatorOptions = {}
 layer = g.PolyganCPlayer_seq
-layerOptions = {'randnormweights':False, 'normalize':False}
+layerOptions = {'randnormweights':True, 'normalize':False}
 
-model = AE.Autoencoder_seq(layer, N, rank, bottleneck_dim, HR_dim, downscalefactor, scalefactor, layerOptions, generatorOptions)
-model = g.Generator_seq(layer, N, rank, HR_dim, HR_dim, 4, layerOptions, generatorOptions)
-
-# print("Running on ", torch.cuda.device_count(), "nodes")
-# model = torch.nn.DataParallel(model)
-
-epoch_loss, info = train(model)
-
-timestamp = time.strftime("%d-%m-%Y_%H:%M:%S")
-plt.figure(figsize=(8,6))
-# Now get weights for every layer:
-for name, param in model.named_parameters():
-    if 'BN' in name:
-        continue
-    vector = param.reshape(-1).cpu().detach().numpy()
-    hist, edges = np.histogram(vector, density=True, bins = int(np.sqrt(vector.shape[0])/2))
-    bin_centers = 0.5*(edges[1:] + edges[:-1])
-    lab = name
-    plt.plot(bin_centers, hist, label=lab)
-plt.xlim([-0.05, 0.05])
-plt.grid(True)
-plt.legend()
-plt.xlabel('Weight value', fontsize=14)
-plt.ylabel('Density', fontsize=14)
-plt.title("Network weights", fontsize=20)
-filename = "AutoEncoder/GENWEIGHTS" + timestamp + ".png"
-plt.savefig(filename, bbox_inches='tight')
-
-fig, ax = plt.subplots(1,5, figsize=(30,6))
+fig, ax = plt.subplots(1,5, figsize=(27,5))
 fs = 20
-fig.suptitle(info, fontsize=10)
-ax[0].plot(list(range(1,num_epochs+1)), epoch_loss, c='b', label='trainloss')
-lossfuncs = "MSE + TV" 
-ax[0].set_title("MSE, $N$ = {}, $r$ = {}".format(N, rank), fontsize=fs)
+#fig.suptitle(info, fontsize=10)
+ax[0].set_title("SL1 loss, $N$ = {}".format(N), fontsize=fs)
 ax[0].set_yscale('log')
-ax[0].grid(True)
-ax[0].set_xlabel('Training epochs', fontsize=fs)
-ax[0].set_ylabel('Loss', fontsize=fs)
-ax[0].legend()
+ax[0].set_ylim([2.0e-3, 1])
 
-trainindex = 75
+ax[0].grid(True)
+ax[0].set_xlabel('Epochs', fontsize=fs)
+ax[0].set_ylabel('Training loss', fontsize=fs)
+
+trainindex = 53
 ax[1].imshow(train_HRimages[trainindex], cmap='gray')
 ax[1].set_title("Input from training set", fontsize=fs)
 ax[1].axis('off')
 
-trainimage = testThisImage(train_LRimages[trainindex], model)
-trainimage_error = np.mean((trainimage - train_HRimages[trainindex])**2)
-psnrscore = psnr(train_HRimages[trainindex].astype(np.float), trainimage.astype(np.float))
-trainset_error = epoch_loss[-1]
-ax[2].imshow(trainimage, cmap='gray')
-ax[2].set_title('Prediction, trainset error = {:.2e}'.format(trainset_error), fontsize=fs)
-ax[2].axes.xaxis.set_ticks([])#set_xticklabels([])
-ax[2].axes.yaxis.set_ticks([])#set_yticklabels([])
-ax[2].set_xlabel('$e$ = {:.2e}   PSNR = {:.2f}'.format(trainimage_error, psnrscore), fontsize=fs)
+colors = ['b', 'r', 'g']
+markers = ['x', 'o', '+']
+lines = ['--', '-.', ':']
+for i, rank in enumerate([5, 50, 100]):
+    model = g.Generator_seq(layer, N, rank, HR_dim, HR_dim, 4, layerOptions, generatorOptions)
+    epoch_loss, info = train(model)
 
+    ax[0].plot(list(range(1,num_epochs+1)), epoch_loss, c=colors[i], ls=lines[i], label='$r$ = {}'.format(rank))
+    ax[0].scatter(list(range(1,num_epochs+1,4)), epoch_loss[::4], c=colors[i], marker=markers[i])
+    ax[0].scatter(num_epochs, epoch_loss[-1], c=colors[i], marker=markers[i])
+    model.eval()
+    trainimage = testThisImage(train_LRimages[trainindex], model)
+    psnrscore = psnr(train_HRimages[trainindex].astype(np.float), trainimage.astype(np.float))
+    trainerror = epoch_loss[-1]
 
-testindex = 8
-ax[3].imshow(test_HRimages[testindex], cmap='gray')
-ax[3].set_title("Input from test set", fontsize=fs)
-ax[3].axis('off')
+    ax[i+2].imshow(trainimage, cmap='gray')
+    ax[i+2].set_title('$r$ = {}'.format(rank), fontsize=fs)
+    ax[i+2].axes.xaxis.set_ticks([])#set_xticklabels([])
+    ax[i+2].axes.yaxis.set_ticks([])#set_yticklabels([])
+    ax[i+2].set_xlabel('$e$ = {:.2e}   PSNR = {:.2f}'.format(trainerror, psnrscore), fontsize=18)
 
-testimage = testThisImage(test_LRimages[testindex], model)
-testimage_error = np.mean((testimage - test_HRimages[testindex])**2)
-psnrscore = psnr(test_HRimages[testindex].astype(np.float), testimage.astype(np.float))
-testimages = testTheseImages(test_LRimages, model)
-testset_error = sum([np.mean((i - j)**2) for i,j in zip(testimages, test_HRimages[testindex])])/2
-ax[4].imshow(testimage, cmap='gray')
-ax[4].set_title('Prediction, testset error = {:.2e}'.format(testset_error), fontsize=fs)
-ax[4].axes.xaxis.set_ticks([])#set_xticklabels([])
-ax[4].axes.yaxis.set_ticks([])#set_yticklabels([])
-ax[4].set_xlabel('$e$ = {:.2e}   PSNR = {:.2f}'.format(testimage_error, psnrscore), fontsize=fs)
-
-# average = torch.zeros(HR_dim, HR_dim)
-# for HiResIm, LoResIm in zip(HR_loader, LR_loader):  
-#     average += HiResIm.mean(0)
-
-
+ax[0].legend(prop={'size': 14})
 fig.subplots_adjust(wspace=0.01, hspace=0.01)
 
-filename = "AutoEncoder/GEN" + timestamp + ".png"
+timestamp = time.strftime("%d-%m-%Y_%H:%M:%S")
+filename = "AutoEncoder/rankImage" + timestamp + ".png"
 fig.savefig(filename, bbox_inches='tight')
 

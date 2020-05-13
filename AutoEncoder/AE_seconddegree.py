@@ -34,7 +34,7 @@ else:
 
 # Parameters:
 batch_size = 8
-N = 1
+N = 2
 rank = 50
 
 LR_dim = 128
@@ -79,10 +79,10 @@ LR_loader = torch.utils.data.DataLoader(train_LRimages, shuffle=False, batch_siz
 
 lossfunc = torch.nn.SmoothL1Loss()
 lossfunc = torch.nn.MSELoss()
-TV_weight = 1.e-4
-SL_weight = 0#.e-5
+TV_weight = 0#1.e-5
+SL_weight = 0#1.e-5
 
-num_epochs = 100
+num_epochs = 500
 tvloss = lf.TVLoss(TV_weight)
 styleloss = lf.StyleLoss(SL_weight)
 
@@ -94,17 +94,16 @@ def train(model):
     epoch_loss = []
     all_loss = []
     optimizer_name = torch.optim.Adam
-    lr = 0.0005
-    w_decay = 1.0e-5
+    lr = 0.0001
+    w_decay = 0#1.0e-4
     optimizer = optimizer_name(model.parameters(), lr=lr, weight_decay=w_decay)
-    gamma = 0.98
+    gamma = 0.99
     #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma, last_epoch=-1)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 2, gamma, last_epoch=-1)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, gamma, last_epoch=-1)
     # Make info for suptitile
     info = str(layer)[27:-2] + ": N = " + str(N) +", r = " + str(rank) + ". " + str(optimizer_name)[25:-2] + " with " + str(scheduler)[26:-26]
     info += ", lr_init = " + str(lr) + ", w_decay = " + str(w_decay) +", gamma = " + str(gamma)
     info += ", TV = " + str(TV_weight) + ", Style = " + str(SL_weight)
-
     start = time.time()
     epochs = tqdm.trange(num_epochs, desc="Start training", leave=True)
     try:
@@ -118,7 +117,7 @@ def train(model):
                 LoResIm = torch.autograd.Variable(LoResIm).to(device)
 
                 output = model(LoResIm).float()
-                loss = lossfunc(output, HiResIm).float() #+ styleloss(output.squeeze(1), HiResIm.squeeze(1)).float() + tvloss(output).float()
+                loss = lossfunc(output, HiResIm).float() + styleloss(output.squeeze(1), HiResIm.squeeze(1)).float() + tvloss(output).float()
                 # loss /= (b*c*w*h)
                 # loss /= w*h
 
@@ -174,14 +173,25 @@ layer = g.PolyganCPlayer_seq
 layerOptions = {'randnormweights':False, 'normalize':False}
 
 model = AE.Autoencoder_seq(layer, N, rank, bottleneck_dim, HR_dim, downscalefactor, scalefactor, layerOptions, generatorOptions)
-model = g.Generator_seq(layer, N, rank, HR_dim, HR_dim, 4, layerOptions, generatorOptions)
-
 # print("Running on ", torch.cuda.device_count(), "nodes")
 # model = torch.nn.DataParallel(model)
 
 epoch_loss, info = train(model)
 
 timestamp = time.strftime("%d-%m-%Y_%H:%M:%S")
+
+
+# Save and load the model as a test:
+modelname = "Testing/Trained_CP_modelN2" + timestamp
+modelparamsname = modelname + "_params.pth"
+modelname += ".pth"
+
+modelparams = {"layer":layer, "N":N, "rank":rank, "bottleneck_dim":bottleneck_dim, "LR_dim":LR_dim, "HR_dim":HR_dim, "downscalefactor":downscalefactor, "scalefactor":scalefactor, "layerOptions":layerOptions, "generatorOptions":generatorOptions}
+torch.save(modelparams, modelparamsname)
+torch.save(model.state_dict(), modelname)
+print("Saved model and params")
+
+
 plt.figure(figsize=(8,6))
 # Now get weights for every layer:
 for name, param in model.named_parameters():
@@ -190,27 +200,26 @@ for name, param in model.named_parameters():
     vector = param.reshape(-1).cpu().detach().numpy()
     hist, edges = np.histogram(vector, density=True, bins = int(np.sqrt(vector.shape[0])/2))
     bin_centers = 0.5*(edges[1:] + edges[:-1])
-    lab = name
+    lab = name[:8] + name[18:]
     plt.plot(bin_centers, hist, label=lab)
-plt.xlim([-0.05, 0.05])
+plt.xlim([-0.1, 0.1])
 plt.grid(True)
 plt.legend()
 plt.xlabel('Weight value', fontsize=14)
 plt.ylabel('Density', fontsize=14)
 plt.title("Network weights", fontsize=20)
-filename = "AutoEncoder/GENWEIGHTS" + timestamp + ".png"
-plt.savefig(filename, bbox_inches='tight')
+filename = "AutoEncoder/AE_secondWeights" + timestamp + ".png"
+#plt.savefig(filename, bbox_inches='tight')
 
 fig, ax = plt.subplots(1,5, figsize=(30,6))
-fs = 20
+fs = 14
 fig.suptitle(info, fontsize=10)
 ax[0].plot(list(range(1,num_epochs+1)), epoch_loss, c='b', label='trainloss')
-lossfuncs = "MSE + TV" 
 ax[0].set_title("MSE, $N$ = {}, $r$ = {}".format(N, rank), fontsize=fs)
 ax[0].set_yscale('log')
 ax[0].grid(True)
-ax[0].set_xlabel('Training epochs', fontsize=fs)
-ax[0].set_ylabel('Loss', fontsize=fs)
+ax[0].set_xlabel('Training epochs', fontsize=14)
+ax[0].set_ylabel('Loss', fontsize=14)
 ax[0].legend()
 
 trainindex = 75
@@ -226,7 +235,7 @@ ax[2].imshow(trainimage, cmap='gray')
 ax[2].set_title('Prediction, trainset error = {:.2e}'.format(trainset_error), fontsize=fs)
 ax[2].axes.xaxis.set_ticks([])#set_xticklabels([])
 ax[2].axes.yaxis.set_ticks([])#set_yticklabels([])
-ax[2].set_xlabel('$e$ = {:.2e}   PSNR = {:.2f}'.format(trainimage_error, psnrscore), fontsize=fs)
+ax[2].set_xlabel('$e$ = {:.2e}   PSNR = {:.2f}'.format(trainimage_error, psnrscore), fontsize=14)
 
 
 testindex = 8
@@ -243,7 +252,7 @@ ax[4].imshow(testimage, cmap='gray')
 ax[4].set_title('Prediction, testset error = {:.2e}'.format(testset_error), fontsize=fs)
 ax[4].axes.xaxis.set_ticks([])#set_xticklabels([])
 ax[4].axes.yaxis.set_ticks([])#set_yticklabels([])
-ax[4].set_xlabel('$e$ = {:.2e}   PSNR = {:.2f}'.format(testimage_error, psnrscore), fontsize=fs)
+ax[4].set_xlabel('$e$ = {:.2e}   PSNR = {:.2f}'.format(testimage_error, psnrscore), fontsize=14)
 
 # average = torch.zeros(HR_dim, HR_dim)
 # for HiResIm, LoResIm in zip(HR_loader, LR_loader):  
@@ -252,6 +261,6 @@ ax[4].set_xlabel('$e$ = {:.2e}   PSNR = {:.2f}'.format(testimage_error, psnrscor
 
 fig.subplots_adjust(wspace=0.01, hspace=0.01)
 
-filename = "AutoEncoder/GEN" + timestamp + ".png"
+filename = "AutoEncoder/AE_second" + timestamp + ".png"
 fig.savefig(filename, bbox_inches='tight')
 
