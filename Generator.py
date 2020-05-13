@@ -2,8 +2,9 @@ import torch
 import threading
 import queue
 
-from math import sqrt
-from math import factorial 
+import pickle 
+
+from math import sqrt, factorial
 
 class PolyLayer(torch.nn.Module):
     def __init__(self, N, rank, s, randnormweights=True, parallel=True):
@@ -23,12 +24,14 @@ class PolyLayer(torch.nn.Module):
         self.parallel = parallel
         if randnormweights:
             self.initweights = torch.nn.init.xavier_normal_
+            
         else:
             self.initweights = torch.nn.init.xavier_uniform_
+            
         self.QueueList = [queue.Queue()]
 
 
-class PolyLayer_seq(torch.nn.Module):
+class PolyLayer_seqOld(torch.nn.Module):
     def __init__(self, N, rank, s, randnormweights=True):
         # Start inherited structures:
         torch.nn.Module.__init__(self)
@@ -41,12 +44,40 @@ class PolyLayer_seq(torch.nn.Module):
         self.N = N
         self.rank = rank
         self.s = s
-        self.weightgain = 1.0
+        self.weightgain_bias = 2
+        self.weightgain_weights = 0.4
+        self.Laplace = torch.distributions.laplace.Laplace(0, 0.00005)
+        self.eps = 0.07
         # Necessary for threads:
         if randnormweights:
+            #self.initweights = torch.nn.init.orthogonal_
             self.initweights = torch.nn.init.xavier_normal_
+            #self.initweights = torch.nn.init.kaiming_normal_
+            #self.initweights = torch.nn.init.normal_
         else:
-            self.initweights = torch.nn.init.xavier_uniform_
+            self.initweights = None
+            #torch.nn.init.xavier_uniform_
+            #self.initweights = torch.nn.init.uniform_
+            
+class PolyLayer_seq(torch.nn.Module):
+    def __init__(self, N, rank, s, initmethod, biasgain, weightgain):
+        # Start inherited structures:
+        torch.nn.Module.__init__(self)
+        # N = order of the polynomial = order of the tensor A:
+        # A is of dimension (s, s, ..., s) = (N x s)
+        # rank = rank used for the tensor cores
+        # size = length of the flattened input
+        # randnormweights = whether to use random weight initialization
+        # normalize = whether to divide each weight by size self.s, as suggested by Morten
+        self.N = N
+        self.rank = rank
+        self.s = s
+        self.weightgain_bias = biasgain
+        self.weightgain_weights = weightgain
+        self.Laplace = torch.distributions.laplace.Laplace(0, 0.00005)
+        self.eps = 0.07
+        self.initweights = initmethod
+
 
 
 class PolyganCPlayer(PolyLayer):
@@ -155,36 +186,70 @@ class PolyganCPlayer(PolyLayer):
         return Nsum + self.b
 
 
-class PolyganCPlayer_seq(PolyLayer_seq):
+class PolyganCPlayer_seqOld(PolyLayer_seq):
     def __init__(self, N, rank, imwidth, imheight, layeroptions):
         PolyLayer_seq.__init__(self, N, rank, imwidth*imheight, randnormweights=layeroptions['randnormweights'])
 
         # Initialize the bias
         b = torch.empty(self.s,1)
-        self.initweights(b, self.weightgain)
-        if layeroptions['normalize']:
-            b /= sqrt(self.s)
+        self.initweights(b, self.weightgain_bias)
+        #torch.nn.init.normal_(b, mean=0.02, std=0.01)
+        # if layeroptions['normalize']:
+        #     b = b / sqrt(self.s)
+        # averagepath = '000001_01_01/average'
+        # with open(averagepath, 'rb') as handle:
+        #     b = pickle.load(handle)
+        
         self.b = torch.nn.Parameter(b.reshape(self.s))
         # Initialize the weights
         self.W = torch.nn.ParameterList()
         for n in range(N+1):
             factor_matrix = torch.zeros(self.s, self.rank)
-            self.initweights(factor_matrix, self.weightgain)
-            if layeroptions['normalize']:
-                factor_matrix /= sqrt(sqrt(self.s))
-            self.W.append(torch.nn.Parameter(factor_matrix))
+            self.initweights(factor_matrix, self.weightgain_weights)
+            self.W.append(torch.nn.Parameter(factor_matrix/(n+1)))
 
     def forward(self, z, b):
-        z = z.clone()
         Rsums = torch.zeros(b, 1, self.s)
         for n in range(self.N):
-            o = n+1
             f = torch.ones(b, 1, self.rank)
             for k in range(n+1):
                 res = torch.matmul(z, self.W[k+1])
                 f = f * res
-            Rsums += torch.matmul(f, self.W[0].t()) /factorial(o)
+            Rsums += torch.matmul(f, self.W[0].t()) / factorial(n + 1)
         return Rsums + self.b
+
+class PolyganCPlayer_seq(PolyLayer_seq):
+    def __init__(self, N, rank, imwidth, imheight, layeroptions):
+        PolyLayer_seq.__init__(self, N, rank, imwidth*imheight, layeroptions["initmethod"], layeroptions["biasgain"], layeroptions["weightgain"])
+
+        # Initialize the bias
+        b = torch.empty(self.s,1)
+        if layeroptions["initmethod"] == "average":
+            averagepath = '000001_01_01/average'
+            with open(averagepath, 'rb') as handle:
+                b = pickle.load(handle)
+            self.initweights = torch.nn.init.xavier_normal_
+        else: 
+            print(self.initweights, self.weightgain_bias)
+            self.initweights(b, self.weightgain_bias)
+        self.b = torch.nn.Parameter(b.reshape(self.s))
+        # Initialize the weights
+        self.W = torch.nn.ParameterList()
+        for n in range(N+1):
+            factor_matrix = torch.zeros(self.s, self.rank)
+            self.initweights(factor_matrix, self.weightgain_weights)
+            self.W.append(torch.nn.Parameter(factor_matrix/(n+1)))
+
+    def forward(self, z, b):
+        Rsums = torch.zeros(b, 1, self.s)
+        for n in range(self.N):
+            f = torch.ones(b, 1, self.rank)
+            for k in range(n+1):
+                res = torch.matmul(z, self.W[k+1])
+                f = f * res
+            Rsums += torch.matmul(f, self.W[0].t()) / factorial(n + 1)
+        return Rsums + self.b
+
 
 
 class PolyclassFTTlayer(PolyLayer):
@@ -259,7 +324,7 @@ class PolyclassFTTlayer(PolyLayer):
         return f.reshape(-1)
 
 
-class PolyclassFTTlayer_seq(PolyLayer_seq):
+class PolyclassFTTlayer_seqOld(PolyLayer_seq):
     def __init__(self, N, rank, imwidth, imheight, layeroptions):
         PolyLayer_seq.__init__(self, N, rank, imwidth*imheight, randnormweights=layeroptions['randnormweights'])
 
@@ -282,14 +347,74 @@ class PolyclassFTTlayer_seq(PolyLayer_seq):
         z = z.clone()
         V = torch.zeros(b, 1, self.N, self.rank, self.rank)
         
-        for k in range(1, self.N):
+        for k in range(self.N):
             d1, d2 = self.ranklist[k], self.ranklist[k+1]
             # print(self.TT[k].shape)
             # print(self.TT[k].permute(1,0,2).reshape(self.s, d1*d2).shape)
             V[:,:,k,0:d1,0:d2] = torch.matmul(z, self.TT[k].permute(1,0,2).reshape(self.s, d1*d2)).reshape(b, 1, d1, d2)
 
         f = self.TT[0][0]
-        for k in range(1, self.N):
+        for k in range(self.N):
+            d1, d2 = self.ranklist[k], self.ranklist[k+1]
+            f = torch.matmul(f, V[:,:, k,0:d1,0:d2])
+        return f.reshape(-1)
+
+class PolyclassFTTlayer_seq(PolyLayer_seq):
+    def __init__(self, N, rank, imwidth, imheight, layeroptions):
+        PolyLayer_seq.__init__(self, N, rank, imwidth*imheight, layeroptions["initmethod"], layeroptions["biasgain"], layeroptions["weightgain"])
+
+        self.ranklist = [1, 1]
+        for n in range(self.N - 1):
+            self.ranklist.insert(-1, self.rank)
+        # Initialize the bias
+        b = torch.empty(self.s,1)
+        if layeroptions["initmethod"] == "average":
+            averagepath = '000001_01_01/average'
+            with open(averagepath, 'rb') as handle:
+                b = pickle.load(handle)
+            self.initweights = torch.nn.init.xavier_normal_
+        else: 
+            self.initweights(b, self.weightgain_bias)
+        self.b = torch.nn.Parameter(b.reshape(self.s))
+        # Start by making the tensor train: store the matrices in one big parameterlist
+
+        self.TT = torch.nn.ParameterList()
+        for n in range(self.N):
+            # Make tensors of size (r_{k-1}, n_{k} = self.s, r_{k})
+            TTcore = torch.zeros(self.ranklist[n], self.s, self.ranklist[n+1])
+            self.initweights(TTcore, self.weightgain_weights)    
+            self.TT.append(torch.nn.Parameter(TTcore))
+
+    def forward(self, z, b):
+        out = torch.zeros(b, self.s)
+        for n in range(self.N):
+            #print("n =",n)
+            V = torch.zeros(b, 1, self.N, self.rank, self.rank)
+            f = self.TT[0][0]
+            #print("f1", f.shape)
+            #for k in range(n+1):
+            for k in range(self.N - n - 1, self.N):
+                #print("k =",k)
+                d1, d2 = self.ranklist[k], self.ranklist[k+1]
+                V[:,:,k,0:d1,0:d2] = torch.matmul(z, self.TT[k].permute(1,0,2).reshape(self.s, d1*d2)).reshape(b, 1, d1, d2)
+                #print(V[:,:,k,0:d1,0:d2].shape)
+                f = torch.matmul(f, V[:, :, k,0:d1,0:d2])
+
+            out += f.reshape(b,-1) / factorial(n+1)
+            #print("out", out.shape)
+        return out + self.b
+        
+
+    def forwardOld(self, z, b):
+        V = torch.zeros(b, 1, self.N, self.rank, self.rank)
+        for k in range(self.N):
+            d1, d2 = self.ranklist[k], self.ranklist[k+1]
+            # print(self.TT[k].shape)
+            # print(self.TT[k].permute(1,0,2).reshape(self.s, d1*d2).shape)
+            V[:,:,k,0:d1,0:d2] = torch.matmul(z, self.TT[k].permute(1,0,2).reshape(self.s, d1*d2)).reshape(b, 1, d1, d2)
+
+        f = self.TT[0][0]
+        for k in range(self.N):
             d1, d2 = self.ranklist[k], self.ranklist[k+1]
             f = torch.matmul(f, V[:,:, k,0:d1,0:d2])
         return f.reshape(-1)
@@ -392,8 +517,8 @@ class Generator_seq(torch.nn.Module):
             self.batch_size = xshape[0]
 
         # Register x as attribute for parallel access, and clone because dataset would be overwritten
-        #self.x = self.BN(x.clone())
-        self.x = x.clone()
+        self.x = self.BN(x.float())
+        #self.x = x.float()#.clone()
         self.x = self.upsample(self.x)
         self.x = self.x.reshape(self.batch_size, self.c, self.s)
         self.x = self.PolyLayer(self.x, self.batch_size)

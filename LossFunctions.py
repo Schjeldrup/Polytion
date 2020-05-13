@@ -2,8 +2,21 @@
 import torch
 import torch.nn.functional as F
 from math import log10, exp, sqrt
-
+import numpy as np
 from skimage.metrics import structural_similarity
+
+class CharbonnierLoss(torch.nn.Module):
+    def __init__(self, eps=1e-6):
+        super(CharbonnierLoss, self).__init__()
+        self.eps = eps
+
+    def forward(self, image1, image2):
+        return torch.mean(torch.sqrt((image1 - image2)**2 + self.eps))
+
+def smooth_l1(input, target):
+    t = np.abs(input - target)
+    return np.mean(np.where(t < 1, 0.5 * (input - target) ** 2, t - 0.5))
+
 
 # See https://mkfmiku.github.io/loss-functions-in-image-enhancement/
 # See also Remi Flamary for how to use L2 and TV together
@@ -17,6 +30,40 @@ class TVLoss(torch.nn.Module):
         h_tv = torch.pow((image[:, :, 1:, :] - image[:, :, :(h - 1), :]), 2).sum()
         w_tv = torch.pow((image[:, :, :, 1:] - image[:, :, :, :(w - 1)]), 2).sum()
         return self.tvloss_weight * torch.sqrt(h_tv + w_tv)
+
+
+class StyleLoss(torch.nn.Module):
+    def __init__(self, StyleLossWeight=1e-5):
+        super(StyleLoss, self).__init__()
+        self.StyleLossWeight = StyleLossWeight
+
+    def forward(self, im1, im2):
+        b, c, w, h = im1.shape
+        #img1 = im1.reshape(b, c, w*h)
+        #img2 = im2.reshape(b, c, w*h)
+
+        #bgram1 = torch.mm(im1.reshape(b, hw), im1.reshape(hw, b))
+        #bgram2 = torch.mm(im2.reshape(b, hw), im2.reshape(hw, b))
+        #bgram1 = torch.mm(img1, img1.t())
+        #bgram2 = torch.mm(img2, img2.t())
+        bgram1 = torch.bmm(im1.view(b, 1, w*h), im1.view(b, w*h, 1))
+        bgram2 = torch.bmm(im2.view(b, 1, w*h), im2.view(b, w*h, 1))
+        #print(bgram1.shape)
+        #print(((bgram1 - bgram2) ** 2).shape)
+
+        return self.StyleLossWeight * torch.mean((bgram1 - bgram2) ** 2)
+
+
+class StyleLossOld(torch.nn.Module):
+    def __init__(self, StyleLossWeight=1e-5):
+        super(StyleLoss, self).__init__()
+        self.StyleLossWeight = StyleLossWeight
+
+    def forward(self, im1, im2):
+        bgram1 = torch.bmm(im1, im1.permute(0, 2, 1))
+        bgram2 = torch.bmm(im2, im2.permute(0, 2, 1))
+        return self.StyleLossWeight * torch.mean((bgram1 - bgram2) ** 2)
+
 
 
 # Orthogonal loss: enforce orthogonal matrices in the weights
