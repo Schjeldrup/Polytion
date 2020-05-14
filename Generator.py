@@ -497,7 +497,7 @@ class Generator(torch.nn.Module):
 
 
 
-class Generator_seq(torch.nn.Module):
+class Generator_seqOld(torch.nn.Module):
     def __init__(self, layer, N, rank, imwidth, imheight, scalefactor, layeroptions, generatoroptions):
         super(Generator_seq, self).__init__()
         # Channels: here we are working with greyscale images
@@ -523,5 +523,33 @@ class Generator_seq(torch.nn.Module):
         self.x = self.x.reshape(self.batch_size, self.c, self.s)
         self.x = self.PolyLayer(self.x, self.batch_size)
 
+        self.x = self.x.reshape(self.batch_size, self.c, self.imwidth, self.imheight)
+        return self.x
+
+    
+class Generator_seq(torch.nn.Module):
+    def __init__(self, layer, N, rank, imwidth, imheight, scalefactor, layeroptions, generatoroptions):
+        super(Generator_seq, self).__init__()
+        # Channels: here we are working with greyscale images
+        self.c = 1
+        self.imwidth, self.imheight = imwidth, imheight
+        self.s = imwidth*imheight
+        self.PolyLayer = layer(N, rank, imwidth, imheight, layeroptions)
+        self.BN = torch.nn.BatchNorm1d(num_features=self.s)
+        self.upsample = torch.nn.Upsample(scale_factor=scalefactor, mode='bilinear', align_corners=False)
+
+    def forward(self, x):
+        # Register dimensions:
+        xshape = x.shape
+        if len(xshape) == 2:
+            self.batch_size = 1
+        else:
+            self.batch_size = xshape[0]
+
+        # Register x as attribute for parallel access, and clone because dataset would be overwritten
+        self.x = self.upsample(x.float())
+        self.x = self.x.reshape(self.batch_size, self.s)
+        self.x = self.BN(self.x).unsqueeze(1)
+        self.x = self.PolyLayer(self.x, self.batch_size)
         self.x = self.x.reshape(self.batch_size, self.c, self.imwidth, self.imheight)
         return self.x
